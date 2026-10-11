@@ -6,6 +6,7 @@ public class EnemyMovement : MonoBehaviour
     private AStarPathfinding pathfinding;
     private List<Vector3> currentPath;
     private int targetIndex;
+    private EnemyAI enemyAI;
 
     public float speed = 5f;
 
@@ -19,6 +20,11 @@ public class EnemyMovement : MonoBehaviour
     void Start()
     {
         pathfinding = FindObjectOfType<AStarPathfinding>();
+        enemyAI = GetComponent<EnemyAI>();
+
+        if (enemyAI != null && enemyAI.data != null)
+            speed = enemyAI.data.speed;
+
         GoToRandomNode();
     }
 

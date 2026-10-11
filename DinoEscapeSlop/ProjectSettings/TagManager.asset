@@ -5,11 +5,12 @@ TagManager:
   serializedVersion: 3
   tags:
   - canPickUp
+  - TriggerSonoro
   layers:
   - Default
   - TransparentFX
   - Ignore Raycast
-  - 
+  - Dino
   - Water
   - UI
   - 
