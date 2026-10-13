@@ -665,13 +665,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ForcesSteer
   target: {fileID: 1481595301}
-  smooothness: 0.5
-  repel: 0.5
-  radius: 10
-  counterforce: {x: 0, y: 0, z: 0}
-  force: {x: 0, y: 0, z: 0}
-  desired: {x: 0, y: 0, z: 0}
-  maxspeed: 2.5
 --- !u!1818360609 &814360342
 RotationConstraint:
   m_ObjectHideFlags: 0
