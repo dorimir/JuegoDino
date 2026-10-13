@@ -9,6 +9,13 @@ public class EnemyMovement : MonoBehaviour
 
     public float speed = 5f;
 
+    [Header("Nodos del Enemigo")]
+    [Tooltip("Asigna aquï¿½ en el Inspector ï¿½nicamente los nodos entre los que quieres que se mueva este enemigo.")]
+    public List<Node> patrolNodes = new List<Node>();
+
+    // Indica a la mï¿½quina de estados si el enemigo completï¿½ su trayecto
+    public bool HasReachedDestination { get; private set; }
+
     void Start()
     {
         pathfinding = FindObjectOfType<AStarPathfinding>();
@@ -24,15 +31,19 @@ public class EnemyMovement : MonoBehaviour
     {
         if (pathfinding == null) return;
 
+        // Cancelamos invocaciones previas para evitar cambios de ruta automÃ¡ticos involuntarios
+        CancelInvoke();
+
         currentPath = pathfinding.FindPath(transform.position, targetPosition);
+
         if (currentPath != null && currentPath.Count > 0)
         {
             targetIndex = 0;
+            HasReachedDestination = false;
         }
         else
         {
-            // Si el A* no encuentra camino, intentamos con otro nodo aleatorio inmediatamente
-            Invoke("GoToRandomNode", 1f);
+            HasReachedDestination = true;
         }
     }
 
@@ -42,29 +53,40 @@ public class EnemyMovement : MonoBehaviour
 
         Vector3 currentWaypoint = currentPath[targetIndex];
 
-        // Nos movemos hacia el nodo
+        // Mover hacia el nodo waypoint actual
         transform.position = Vector3.MoveTowards(transform.position, currentWaypoint, speed * Time.deltaTime);
 
-        // Aumentamos ligeramente el margen a 0.2f para evitar que falle por precisión numérica
+        // Comprobaciï¿½n de llegada al waypoint actual
         if (Vector3.Distance(transform.position, currentWaypoint) < 0.2f)
         {
             targetIndex++;
+
+            // ï¿½Llegamos al final del camino completo?
             if (targetIndex >= currentPath.Count)
             {
                 currentPath = null;
-                // Espera 0.5 segundos antes de elegir el siguiente nodo para que parezca natural
-                Invoke("GoToRandomNode", 0.5f);
+                HasReachedDestination = true; // Notificamos a la FSM que hemos llegado al destino final
             }
         }
     }
 
-    void GoToRandomNode()
+    /// <summary>
+    /// Selecciona un nodo aleatorio ï¿½NICAMENTE de la lista de nodos asignada en el Inspector.
+    /// </summary>
+    public void GoToRandomNode()
     {
-        Node[] allNodes = FindObjectsOfType<Node>();
-        if (allNodes.Length > 0)
+        if (patrolNodes != null && patrolNodes.Count > 0)
         {
-            Node randomNode = allNodes[Random.Range(0, allNodes.Length)];
-            MoveTo(randomNode.transform.position);
+            Node randomNode = patrolNodes[Random.Range(0, patrolNodes.Count)];
+
+            if (randomNode != null)
+            {
+                MoveTo(randomNode.transform.position);
+            }
+        }
+        else
+        {
+            Debug.LogWarning($"[EnemyMovement] El objeto {gameObject.name} no tiene nodos asignados en su lista 'Patrol Nodes'.");
         }
     }
 }
