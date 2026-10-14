@@ -36,10 +36,12 @@ public class EnemyMovement : MonoBehaviour
 
         currentPath = pathfinding.FindPath(transform.position, targetPosition);
 
+        //NO ES EL ULTIMO NODO
         if (currentPath != null && currentPath.Count > 0)
         {
             targetIndex = 0;
             HasReachedDestination = false;
+
         }
         else
         {
@@ -54,6 +56,7 @@ public class EnemyMovement : MonoBehaviour
         Vector3 currentWaypoint = currentPath[targetIndex];
 
         // Mover hacia el nodo waypoint actual
+        this.GetComponent<ForcesSeek>().setTarget(currentWaypoint); 
         transform.position = Vector3.MoveTowards(transform.position, currentWaypoint, speed * Time.deltaTime);
 
         // Comprobaci�n de llegada al waypoint actual
@@ -73,6 +76,7 @@ public class EnemyMovement : MonoBehaviour
     /// <summary>
     /// Selecciona un nodo aleatorio �NICAMENTE de la lista de nodos asignada en el Inspector.
     /// </summary>
+    /// ESTO DEBERIA ESTAR CONDICIONADO POR EL ESTADO WANDER
     public void GoToRandomNode()
     {
         if (patrolNodes != null && patrolNodes.Count > 0)
