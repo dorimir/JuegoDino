@@ -89,12 +89,15 @@ public class WanderSeek : MonoBehaviour
                 }
                 
                 //creamos el nuevo vector wander
-                float newx = Mathf.Cos(newstep)*wander.x -Mathf.Sin(newstep)*wander.z;
-                float newz = Mathf.Sin(newstep)*wander.x +Mathf.Cos(newstep)*wander.z;
+                float newx;
+                newx = Mathf.Cos(newstep)*wander.x -Mathf.Sin(newstep)*wander.z;
+                float newz;
+                newz= Mathf.Sin(newstep)*wander.x +Mathf.Cos(newstep)*wander.z;
                 Vector3 newWander= new Vector3(newx, wander.y, newz);
-
+                Vector3 desired_wander = new Vector3(newWander.x/desired.x, newWander.y/desired.y, newWander.z/desired.z);
+                
                 //comprobamos no excedir el ángulo máximo
-                float wAngle = Mathf.Acos(newWander/desired);
+                float wAngle = Mathf.Acos( Mathf.Sqrt(desired_wander.x*desired_wander.x + desired_wander.z*desired_wander.z));
                 if(wAngle<0)
                 {
                     wAngle = -wAngle;
@@ -106,15 +109,15 @@ public class WanderSeek : MonoBehaviour
                     if(newstep>0)
                     {
                          //creamos el nuevo vector wander
-                        float newx = Mathf.Cos(maxWanderStrengthAngle)*desired.x -Mathf.Sin(maxWanderStrengthAngle)*desired.z;
-                        float newz = Mathf.Sin(maxWanderStrengthAngle)*desired.x +Mathf.Cos(maxWanderStrengthAngle)*desired.z;
-                        Vector3 newWander= new Vector3(newx, wander.y, newz);
+                        newx = Mathf.Cos(maxWanderStrengthAngle)*desired.x -Mathf.Sin(maxWanderStrengthAngle)*desired.z;
+                        newz = Mathf.Sin(maxWanderStrengthAngle)*desired.x +Mathf.Cos(maxWanderStrengthAngle)*desired.z;
+                        newWander= new Vector3(newx, wander.y, newz);
                     }
                     else
                     {
-                        float newx = Mathf.Cos(-maxWanderStrengthAngle)*desired.x -Mathf.Sin(-maxWanderStrengthAngle)*desired.z;
-                        float newz = Mathf.Sin(-maxWanderStrengthAngle)*desired.x +Mathf.Cos(-maxWanderStrengthAngle)*desired.z;
-                        Vector3 newWander= new Vector3(newx, wander.y, newz);
+                        newx = Mathf.Cos(-maxWanderStrengthAngle)*desired.x -Mathf.Sin(-maxWanderStrengthAngle)*desired.z;
+                        newz = Mathf.Sin(-maxWanderStrengthAngle)*desired.x +Mathf.Cos(-maxWanderStrengthAngle)*desired.z;
+                        newWander= new Vector3(newx, wander.y, newz);
                     }
                        
                 }
