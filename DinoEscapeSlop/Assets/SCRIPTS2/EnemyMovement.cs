@@ -10,16 +10,16 @@ public class EnemyMovement : MonoBehaviour
     public float speed = 5f;
 
     [Header("Nodos del Enemigo")]
-    [Tooltip("Asigna aqu� en el Inspector �nicamente los nodos entre los que quieres que se mueva este enemigo.")]
+    [Tooltip("Asigna aquí en el Inspector únicamente los nodos entre los que quieres que se mueva este enemigo.")]
     public List<Node> patrolNodes = new List<Node>();
 
-    // Indica a la m�quina de estados si el enemigo complet� su trayecto
+    // Indica a la máquina de estados si el enemigo completó su trayecto
     public bool HasReachedDestination { get; private set; }
 
     void Start()
     {
         pathfinding = FindObjectOfType<AStarPathfinding>();
-        GoToRandomNode();
+        HasReachedDestination = true;
     }
 
     void Update()
@@ -69,12 +69,12 @@ public class EnemyMovement : MonoBehaviour
         this.GetComponent<ForcesSeek>().setTarget(currentWaypoint); 
         transform.position = Vector3.MoveTowards(transform.position, currentWaypoint, speed * Time.deltaTime);
 
-        // Comprobaci�n de llegada al waypoint actual
+        // Comprobación de llegada al waypoint actual
         if (Vector3.Distance(transform.position, currentWaypoint) < 0.2f)
         {
             targetIndex++;
 
-            // �Llegamos al final del camino completo?
+            // ¿Llegamos al final del camino completo?
             if (targetIndex >= currentPath.Count)
             {
                 currentPath = null;
@@ -84,7 +84,7 @@ public class EnemyMovement : MonoBehaviour
     }
 
     /// <summary>
-    /// Selecciona un nodo aleatorio �NICAMENTE de la lista de nodos asignada en el Inspector.
+    /// Selecciona un nodo aleatorio ÚNICAMENTE de la lista de nodos asignada en el Inspector.
     /// </summary>
     /// ESTO DEBERIA ESTAR CONDICIONADO POR EL ESTADO WANDER
     public void GoToRandomNode()
