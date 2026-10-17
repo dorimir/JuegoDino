@@ -661,10 +661,10 @@ MonoBehaviour:
   m_GameObject: {fileID: 814360333}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 157fae88de90a1a20b0ea562c6b0fbf8, type: 3}
+  m_Script: {fileID: 11500000, guid: 3d374aacd6f5fe8ff8641211fcff9588, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ForcesSteer
-  target: {fileID: 1481595301}
+  target: {fileID: 0}
 --- !u!1818360609 &814360342
 RotationConstraint:
   m_ObjectHideFlags: 0
