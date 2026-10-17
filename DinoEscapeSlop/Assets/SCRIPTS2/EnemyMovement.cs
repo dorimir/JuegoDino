@@ -36,7 +36,7 @@ public class EnemyMovement : MonoBehaviour
 
         currentPath = pathfinding.FindPath(transform.position, targetPosition);
 
-        //NO ES EL ULTIMO NODO
+        //estamos en un camino, no hemos llegado al destino final
         if (currentPath != null && currentPath.Count > 0)
         {
             targetIndex = 0;
@@ -54,6 +54,16 @@ public class EnemyMovement : MonoBehaviour
         if (currentPath == null || currentPath.Count == 0) return;
 
         Vector3 currentWaypoint = currentPath[targetIndex];
+
+        //Si el nodo actual es el ultimo
+        if (targetIndex+1 >= currentPath.Count)
+        {
+            this.GetComponent<ForcesSeek>().setArrival(true); 
+        }
+        else 
+        {
+            this.GetComponent<ForcesSeek>().setArrival(false); 
+        }
 
         // Mover hacia el nodo waypoint actual
         this.GetComponent<ForcesSeek>().setTarget(currentWaypoint); 

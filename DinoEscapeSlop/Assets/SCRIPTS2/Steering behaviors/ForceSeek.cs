@@ -35,6 +35,11 @@ public class ForcesSeek : MonoBehaviour
             target = newTarget;
         }
 
+        public void setArrival(bool newArrival)
+        {
+            Arrival = newArrival;
+        }
+
         private void rotation(Vector3 targetPosition)
         {
             if(targetPosition == null) return;
@@ -75,7 +80,7 @@ public class ForcesSeek : MonoBehaviour
             }
 
 
-            if(Arrival) //Falta bool arrival
+            if(Arrival)
             {
                 //ARRIVAL (balance de fuerzas en el centro, contrafuerza progresivamente superior a la fuerza de empuje) 
                 
@@ -87,13 +92,13 @@ public class ForcesSeek : MonoBehaviour
                 
                 if(distance<radius)
                 {
-                    //TODO Rebajar ambas fuerzas progresivamente
+                    // Rebajar ambas fuerzas progresivamente
                     Debug.Log("Ratio: " + (1f- distance / radius )); //Range 0-1, 0 = center, 1 = radius
-                    
+                    float ratio = distance/radius; //Range 0-1, 0 = center, 1 = radius
                     //TODO Rebajar ambas fuerzas progresivamente
-                    counterforce = new Vector3(0, 0, force.z* (1f+(1 - distance/radius))*repel); 
+                    counterforce = new Vector3(0, 0, force.z* (1f+(1 - ratio))*repel); 
                     force = new Vector3(0, 0, force.z);
-                    this.GetComponent<ConstantForce>().relativeForce = force - counterforce; 
+                    this.GetComponent<ConstantForce>().relativeForce = (force - counterforce)*ratio; 
 
                 }
                 else this.GetComponent<ConstantForce>().relativeForce = force; 
