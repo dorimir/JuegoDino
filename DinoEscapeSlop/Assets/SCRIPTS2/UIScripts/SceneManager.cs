@@ -1,12 +1,22 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.UIElements;
 
-public class ChangeScene : MonoBehaviour
+namespace StealthGame
 {
-    [SerializeField] private string sceneName;
-
-    public void LoadScene()
+    public class SceneManagerScript : MonoBehaviour
     {
-        SceneManager.LoadScene(sceneName);
+        [SerializeField] private string sceneName;
+
+        public void LoadScene()
+        {
+            UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
+        }
+    
+            public void ExitGame()
+        {
+            Debug.Log("Salir del juego");
+            Application.Quit();
+        }
     }
 }
