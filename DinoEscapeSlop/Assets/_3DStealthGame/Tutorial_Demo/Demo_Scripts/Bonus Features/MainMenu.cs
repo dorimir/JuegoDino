@@ -5,7 +5,7 @@ using UnityEngine.UIElements;
 
 namespace StealthGame
 {
-    public class MainMenu : MonoBehaviour
+    public class MainMenuCustom : MonoBehaviour
     {
         private UIDocument m_UIDocument;
 

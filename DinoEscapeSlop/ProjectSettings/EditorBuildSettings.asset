@@ -8,5 +8,17 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/_3DStealthGame/Tutorial_Demo/Demo_Scenes/MainMenu.unity
     guid: e0afa25d30aeb924895fa68e23be7af2
+  - enabled: 1
+    path: Assets/Scenes/UI_Scenes/MainMenu.unity
+    guid: e63307296714eaa48bf683545173be34
+  - enabled: 1
+    path: Assets/Scenes/EscenarioPrincipal.unity
+    guid: 874f5dca9a8915849aabaf8c0a953a29
+  - enabled: 1
+    path: Assets/Scenes/UI_Scenes/WinScene.unity
+    guid: 338e63b4869f62048a9661b56870eb2f
+  - enabled: 1
+    path: Assets/Scenes/UI_Scenes/LoseScene.unity
+    guid: bf40645c27a1f2f46993b0dfad87e655
   m_configObjects: {}
   m_UseUCBPForAssetBundles: 0
