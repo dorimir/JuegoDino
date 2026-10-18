@@ -7,7 +7,7 @@ public class WanderSeek : MonoBehaviour
             private bool Arrival = false; //si es true, el enemigo se detiene en el centro del nodo, si es false, el enemigo sigue avanzando hasta el siguiente nodo
             
             //follow strength, higher = faster, smaller arc;
-            private float smooothness = 0.5f;
+            public float followStrength = 0.5f; //0.5 default
 
             private float repel = 0.5f; // fuerza de repulsion, mayor = mas fuerte rango 0-1
 
@@ -16,6 +16,7 @@ public class WanderSeek : MonoBehaviour
             private float maxWanderStrength = 1f; //0-1, 1 significa que el angulo de wander es igual al ratio distancia
 
             private float step = 45f; //numero de grados por el que variará el ángulo en cada frame;
+
             private Vector3 counterforce = new Vector3(0,0,0);
             private Vector3 force = new Vector3(0,0,0);
             private Vector3 desired = new Vector3(0,0,0);
@@ -24,6 +25,8 @@ public class WanderSeek : MonoBehaviour
 
             //MAXSPEED rotation interpolation factor
             private float maxspeed = 2.5F; 
+
+            private bool wandering = true;
             
          // Start is called once before the first execution of Update after the MonoBehaviour is created
         void Start()
@@ -32,8 +35,13 @@ public class WanderSeek : MonoBehaviour
 
         // Update is called once per frame
         void FixedUpdate()
-        {
-            wanderRotation(target);
+        {   
+            if(wander)
+            {
+                wanderRotation(target);
+            }
+            else rotation(target);
+            
             forceForward(target);
         }
 
@@ -47,6 +55,35 @@ public class WanderSeek : MonoBehaviour
         public void setArrival(bool newArrival)
         {
             Arrival = newArrival;
+        }
+
+        public void setWanderState(bool newWandering)
+        {
+            wandering = newWandering;
+        }
+
+        private void rotation(Vector3 targetPosition)
+        {
+            if(targetPosition == null) return;
+            //ROTATION
+            //1.DESIRED
+            desired = targetPosition - this.transform.position;
+
+            //TURNING
+             // Generate a Quaternion that faces that direction
+            // Passing the up direction (Vector3.up) as the second argument keeps the head from tilting NO HACE FALTA
+            Quaternion targetRotation = Quaternion.LookRotation(desired);
+
+           
+            // 2. Interpolate between the current and target rotations with Slerp
+            // Moving a fixed fraction toward the target each frame produces
+            // a natural turn that eases out near the end
+            this.transform.rotation = Quaternion.Slerp
+            (
+                this.transform.rotation, // Current rotation
+                targetRotation,     // Target rotation
+                Time.deltaTime * maxspeed // Interpolation factor
+            );
         }
 
         private void wanderRotation(Vector3 targetPosition)
@@ -160,7 +197,7 @@ public class WanderSeek : MonoBehaviour
         {
             if(targetPosition == null) return;
             //FORCE FORWARD
-            force = Vector3.Lerp(this.transform.position, targetPosition, smooothness * Time.deltaTime);
+            force = Vector3.Lerp(this.transform.position, targetPosition, followStrength * Time.deltaTime);
 
             if(force.z<0) //asegura que la fuerza sea positiva
             {
