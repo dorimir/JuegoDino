@@ -33,7 +33,7 @@ public class Flockingstate : IState
             }
         }
 
-        // ÚNICAMENTE evalúa un nuevo nodo cuando ha llegado por completo a su destino anterior
+        // Evalúa un nuevo nodo únicamente cuando ha llegado al nodo destino anterior
         if (ai.Movement.HasReachedDestination)
         {
             EvaluateAndMove();
@@ -47,14 +47,14 @@ public class Flockingstate : IState
 
     private void EvaluateAndMove()
     {
-        // --- CASO 1: EL ENEMIGO ES EL LÍDER ---
+        // --- CASO 1: EL LÍDER ---
         if (ai.isLeader)
         {
             ai.Movement.GoToRandomNode();
             return;
         }
 
-        // --- CASO 2: EL ENEMIGO ES UN SEGUIDOR ---
+        // --- CASO 2: EL SEGUIDOR ---
         Node nextNode = ChooseFollowerNode();
 
         if (nextNode != null)
@@ -90,7 +90,7 @@ public class Flockingstate : IState
             float distToLeader = Vector3.Distance(neighborNode.transform.position, ai.leaderTransform.position);
             score -= distToLeader * ai.LeaderFollowWeight;
 
-            // 2. SEPARACIÓN DE OTROS SEGUIDORES
+            // 2. SEPARACIÓN EN ELECCIÓN DE NODO
             foreach (var ally in nearbyAllies)
             {
                 if (ally == ai.leaderTransform) continue;
