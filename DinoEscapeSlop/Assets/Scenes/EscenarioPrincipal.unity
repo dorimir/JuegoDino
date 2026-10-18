@@ -2011,6 +2011,11 @@ PrefabInstance:
       propertyPath: m_Name
       value: DInoSumiso (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 3009193123022946767, guid: f07a903126f126f4294cb2c2c6cf64b8,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3353838593235130167, guid: f07a903126f126f4294cb2c2c6cf64b8,
         type: 3}
       propertyPath: m_LocalPosition.x
@@ -16491,6 +16496,11 @@ PrefabInstance:
       propertyPath: m_Name
       value: DInoSumiso
       objectReference: {fileID: 0}
+    - target: {fileID: 3009193123022946767, guid: f07a903126f126f4294cb2c2c6cf64b8,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3353838593235130167, guid: f07a903126f126f4294cb2c2c6cf64b8,
         type: 3}
       propertyPath: m_LocalPosition.x
@@ -19251,6 +19261,11 @@ PrefabInstance:
       propertyPath: m_Name
       value: First Person Controller Minimal (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 5241267463746980526, guid: f2e0b7ae4dae8cf44955bccd3512b213,
+        type: 3}
+      propertyPath: m_TagString
+      value: Player
+      objectReference: {fileID: 0}
     - target: {fileID: 5241892580736583940, guid: f2e0b7ae4dae8cf44955bccd3512b213,
         type: 3}
       propertyPath: m_TagString
@@ -19452,7 +19467,7 @@ PrefabInstance:
         type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 9b07fe994912caa48aac652a4eeb3c2d, type: 2}
+      objectReference: {fileID: 2100000, guid: 0355e9165ee84b24e83081cc0ffd14ce, type: 2}
     - target: {fileID: -6795581379350589763, guid: c0901832d786b744487f7131fea83654,
         type: 3}
       propertyPath: m_Layer
@@ -19492,6 +19507,16 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Layer
       value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: c0901832d786b744487f7131fea83654,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 919132149155446097, guid: c0901832d786b744487f7131fea83654,
+        type: 3}
+      propertyPath: m_TagString
+      value: Enemy
       objectReference: {fileID: 0}
     - target: {fileID: 3177544178620039969, guid: c0901832d786b744487f7131fea83654,
         type: 3}
@@ -19556,6 +19581,14 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 120784972}
     m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c0901832d786b744487f7131fea83654,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1962914465}
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c0901832d786b744487f7131fea83654,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1962914466}
     - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: c0901832d786b744487f7131fea83654,
         type: 3}
       insertIndex: -1
@@ -22017,6 +22050,11 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8736044680275406364, guid: a9006678fd64814468ee8385f5aed9c2,
+        type: 3}
+      propertyPath: chaseSpeed
+      value: 5
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -23552,9 +23590,14 @@ MonoBehaviour:
   leaderTransform: {fileID: 0}
   IsPrey: 0
   SafeRange: 22
-  DetectionRange: 5
-  LoseRange: 10
-  AttackRange: 2.5
+  visionRange: 16
+  visionAngle: 100
+  eyeHeight: 0.65
+  DetectionRange: 16
+  LoseRange: 25
+  AttackRange: 2
+  patrolSpeed: 3.5
+  chaseSpeed: 6
   FlockRadius: 10
   TooCloseRadius: 2.5
   LeaderFollowWeight: 3
@@ -23573,7 +23616,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 650c25f0288258e41bafec7909dd84bf, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyMovement
-  speed: 2
+  speed: 3.5
   patrolNodes:
   - {fileID: 1497026184}
   - {fileID: 517012942}
@@ -23595,6 +23638,39 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 1645004765}
   m_PrefabAsset: {fileID: 0}
+--- !u!65 &1962914465
+BoxCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1962914461}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0.5, z: 0}
+--- !u!114 &1962914466
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1962914461}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 50cf0baeb8996544ebb49639285ea295, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::AStarPathfinding
 --- !u!1 &1969956011
 GameObject:
   m_ObjectHideFlags: 0
@@ -25380,7 +25456,6 @@ SceneRoots:
   m_Roots:
   - {fileID: 1286251961}
   - {fileID: 945271094}
-  - {fileID: 1645004765}
   - {fileID: 594026181}
   - {fileID: 1533352771}
   - {fileID: 858725026}
@@ -25388,5 +25463,6 @@ SceneRoots:
   - {fileID: 870202580}
   - {fileID: 1638260508}
   - {fileID: 1807939500}
-  - {fileID: 1478561820}
   - {fileID: 233059407}
+  - {fileID: 1478561820}
+  - {fileID: 1645004765}

@@ -1912,7 +1912,7 @@ Transform:
     - target: {fileID: -6831638722978136787, guid: c0901832d786b744487f7131fea83654, type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 9b07fe994912caa48aac652a4eeb3c2d, type: 2}
+      objectReference: {fileID: 2100000, guid: 0355e9165ee84b24e83081cc0ffd14ce, type: 2}
     - target: {fileID: -6795581379350589763, guid: c0901832d786b744487f7131fea83654, type: 3}
       propertyPath: m_Layer
       value: 3
