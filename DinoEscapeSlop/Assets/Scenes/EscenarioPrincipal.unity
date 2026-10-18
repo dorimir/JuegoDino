@@ -5753,6 +5753,8 @@ PrefabInstance:
     - {fileID: 8229786263334396069, guid: c95ab41648a6f6b47860b4cba2b9bf7a, type: 3}
     - {fileID: 4438912979880131499, guid: c95ab41648a6f6b47860b4cba2b9bf7a, type: 3}
     - {fileID: 6091627672572634218, guid: c95ab41648a6f6b47860b4cba2b9bf7a, type: 3}
+    - {fileID: 1872754653677811998, guid: c95ab41648a6f6b47860b4cba2b9bf7a, type: 3}
+    - {fileID: 4497824990447706483, guid: c95ab41648a6f6b47860b4cba2b9bf7a, type: 3}
     m_AddedGameObjects:
     - targetCorrespondingSourceObject: {fileID: 141613810341687884, guid: c95ab41648a6f6b47860b4cba2b9bf7a,
         type: 3}
@@ -8755,6 +8757,11 @@ MonoBehaviour:
   - {fileID: 1346610652}
   - {fileID: 123920181}
   - {fileID: 751727368}
+  followDistance: 3
+  laneWidth: 3
+  separationRadius: 2.5
+  separationStrength: 2
+  leaderGiveWayRadius: 5
 --- !u!65 &858725023
 BoxCollider:
   m_ObjectHideFlags: 0
@@ -11603,7 +11610,6 @@ GameObject:
   m_Component:
   - component: {fileID: 1111666783}
   - component: {fileID: 1111666782}
-  - component: {fileID: 1111666781}
   - component: {fileID: 1111666780}
   m_Layer: 0
   m_Name: Main Camera (1)
@@ -11656,14 +11662,6 @@ MonoBehaviour:
     m_VarianceClampScale: 0.9
     m_ContrastAdaptiveSharpening: 0
   m_Version: 2
---- !u!81 &1111666781
-AudioListener:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1111666779}
-  m_Enabled: 1
 --- !u!20 &1111666782
 Camera:
   m_ObjectHideFlags: 0
@@ -22586,6 +22584,11 @@ MonoBehaviour:
   - {fileID: 1346610652}
   - {fileID: 123920181}
   - {fileID: 751727368}
+  followDistance: 3
+  laneWidth: 3
+  separationRadius: 2.5
+  separationStrength: 2
+  leaderGiveWayRadius: 5
 --- !u!4 &1962914464 stripped
 Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: c0901832d786b744487f7131fea83654,
