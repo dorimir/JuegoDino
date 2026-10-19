@@ -28,11 +28,45 @@ public class Flockingstate : IState
 
     public void Update()
     {
-        // 1. Transición inmediata a Chase / Flee si el jugador vuelve a entrar en su cono de visión
-        if (ai.Player != null && ai.CanSeePlayer())
+        // 1. REGLA FUNDAMENTAL DE PRESAS: Detección de dinosaurios grandes (Depredadores)
+        // "si en cualquier momento uno de los dinosaurios grandes entra en su campo visual toda la manada huirá durante 10 segundos..."
+        if (ai.IsPrey)
         {
-            ai.StateMachine.ChangeState(ai.IsPrey ? (IState)ai.FleeState : (IState)ai.ChaseState);
-            return;
+            if (ai.CanSeeBigDino(out EnemyAI spottedPredator))
+            {
+                Debug.Log($"{ai.gameObject.name} (Presa) detectó al dinosaurio grande {spottedPredator.gameObject.name}. ¡Toda la manada huye!");
+                ai.NotifyPackFlee(spottedPredator.transform, spottedPredator);
+                return;
+            }
+
+            // 2. REGLA DE PRESAS: Detección del Jugador
+            // Cualquier miembro de la manada que detecte al jugador alerta a toda la manada
+            if (ai.CanSeePlayer())
+            {
+                Debug.Log($"{ai.gameObject.name} (Presa) vio al jugador. ¡Toda la manada entra en persecución!");
+                ai.NotifyPackChase(ai.Player);
+                return;
+            }
+        }
+        else
+        {
+            // COMPORTAMIENTO DE DINOSAURIO GRANDE (Depredador)
+            // Prioridad 1: Jugador humano
+            if (ai.Player != null && ai.CanSeePlayer())
+            {
+                ai.CurrentChaseTarget = ai.Player;
+                ai.StateMachine.ChangeState(ai.ChaseState);
+                return;
+            }
+
+            // Prioridad 2: Presas ("dinosaurios que sean presas de otro")
+            if (ai.CanSeePrey(out EnemyAI targetPrey))
+            {
+                Debug.Log($"{ai.gameObject.name} (Depredador) avistó presa {targetPrey.gameObject.name}. ¡Inicia cacería!");
+                ai.CurrentChaseTarget = targetPrey.transform;
+                ai.StateMachine.ChangeState(ai.ChaseState);
+                return;
+            }
         }
 
         // 2. Comportamiento para seguidores con líder
@@ -88,9 +122,11 @@ public class Flockingstate : IState
             Node nearestNode = ai.Movement.GetNearestPatrolOrGraphNode();
             if (nearestNode != null)
             {
-                float dist = Vector3.Distance(ai.transform.position, nearestNode.transform.position);
-                // Si el dinosaurio se alejó de la red (más de 1.2m), navega de vuelta al nodo más cercano
-                if (dist > 1.2f)
+                float dx = ai.transform.position.x - nearestNode.transform.position.x;
+                float dz = ai.transform.position.z - nearestNode.transform.position.z;
+                float dist = Mathf.Sqrt(dx * dx + dz * dz);
+                // Si el dinosaurio se alejó de la red (más de 1.5m en plano horizontal), navega de vuelta al nodo más cercano
+                if (dist > 1.5f)
                 {
                     isReturningToNetwork = true;
                     ai.Movement.MoveTo(nearestNode.transform.position);
