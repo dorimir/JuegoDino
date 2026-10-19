@@ -15,7 +15,7 @@ public class WanderSeek2 : MonoBehaviour
 
             private float maxWanderStrength = 1f; //0-1, 1 significa que el angulo de wander es igual al ratio distancia // maximo angulo de variacion en %
 
-            private float minstep = 90f; //numero minimo de grados que puede girar;
+            private float minstep = 130f; //numero minimo de grados que puede girar;
             private float maxstep = 180f; //numero máximo de grados que puede girar;
 
             private Vector3 counterforce = new Vector3(0,0,0);
@@ -31,6 +31,8 @@ public class WanderSeek2 : MonoBehaviour
 
             private bool calculateWander = true;
             private bool inWander = true;
+
+            private int counter = 0;
             
          // Start is called once before the first execution of Update after the MonoBehaviour is created
         void Start()
@@ -112,7 +114,7 @@ public class WanderSeek2 : MonoBehaviour
                     {
                         Debug.Log("calculate");
                         //calculamos el ratio de wander
-                        float distance = Mathf.Sqrt(desired.x*desired.x + desired.z*desired.z);
+                       float distance = Mathf.Sqrt(desired.x*desired.x + desired.z*desired.z);
                         if(distance<0) distance = -distance; //asegura que la distancia sea positiva
                         float wanderRatio = (1f-(distance/100f))*distance;
 
@@ -127,30 +129,29 @@ public class WanderSeek2 : MonoBehaviour
 
                         //calculamos el maximo angulo de desviación siempre positivo
                         float maxWanderStrengthAngle = wanderRatioAngle * maxWanderStrength;
+                        
 
-                        //decidimos la variación frame a frame
-                        int rand = Random.Range(0,1);
-                        float randstep = Random.Range(minstep,maxstep);
+                        //decidimos la variación
+                        float randstep = Random.Range(0,maxWanderStrengthAngle);
                         float newstep = randstep;
-                        if(rand==0)
-                        {
-                            newstep = newstep;
-                        }
-                        else
-                        {
-                        newstep = -newstep; 
-                        }
+
+                        //oscila entre positivo y negativo
+                        if(counter%2==0) newstep = -newstep; 
+
+                        counter++;
+                        
 
                         //creamos el nuevo vector wander
                         float newx;
-                        newx = Mathf.Cos(newstep)*wander.x -Mathf.Sin(newstep)*wander.z;
+                        newx = Mathf.Cos(newstep)*desired.x -Mathf.Sin(newstep)*desired.z;
                         float newz;
-                        newz= Mathf.Sin(newstep)*wander.x +Mathf.Cos(newstep)*wander.z;
-                        Vector3 newWander= new Vector3(newx, wander.y, newz);
-                        Vector3 desired_wander = new Vector3(newWander.x/desired.x, newWander.y/desired.y, newWander.z/desired.z);
+                        newz= Mathf.Sin(newstep)*desired.x +Mathf.Cos(newstep)*desired.z;
+                        wander= new Vector3(newx, desired.y, newz);
+                        Vector3 newWander = new Vector3(wander.x/desired.x, wander.y/desired.y, wander.z/desired.z);
+                        
                         
                         //comprobamos no excedir el ángulo máximo
-                        float wAngle = Mathf.Acos( Mathf.Sqrt(desired_wander.x*desired_wander.x + desired_wander.z*desired_wander.z));
+                        float wAngle = Mathf.Acos( Mathf.Sqrt(newWander.x*newWander.x + newWander.z*newWander.z));
                         if(wAngle<0)
                         {
                             wAngle = -wAngle;
@@ -164,18 +165,15 @@ public class WanderSeek2 : MonoBehaviour
                                 //creamos el nuevo vector wander
                                 newx = Mathf.Cos(maxWanderStrengthAngle)*desired.x -Mathf.Sin(maxWanderStrengthAngle)*desired.z;
                                 newz = Mathf.Sin(maxWanderStrengthAngle)*desired.x +Mathf.Cos(maxWanderStrengthAngle)*desired.z;
-                                newWander= new Vector3(newx, wander.y, newz);
+                                wander= new Vector3(newx, wander.y, newz);
                             }
                             else
                             {
                                 newx = Mathf.Cos(-maxWanderStrengthAngle)*desired.x -Mathf.Sin(-maxWanderStrengthAngle)*desired.z;
                                 newz = Mathf.Sin(-maxWanderStrengthAngle)*desired.x +Mathf.Cos(-maxWanderStrengthAngle)*desired.z;
-                                newWander= new Vector3(newx, wander.y, newz);
+                                wander= new Vector3(newx, wander.y, newz);
                             }
                         }
-
-                        //actualizamos wander para continuar variando sobre él
-                        wander = newWander;
 
                         calculateWander = false;
                     }
@@ -187,12 +185,15 @@ public class WanderSeek2 : MonoBehaviour
 
 
                     Quaternion currentRotation = Quaternion.Euler(this.transform.rotation.x,this.transform.rotation.y,this.transform.rotation.z);
-                    float currentRotationy = this.transform.rotation.y;
-                    currentRotationy = Mathf.Floor(currentRotationy*10f);
+                    float currentRotationy =  Mathf.Floor((1f-currentRotation.y)*10f);
                     currentRotationy = currentRotationy/10f;
+                    //float currentRotationy = this.transform.rotation.y;
+                    //currentRotationy = Mathf.Floor(currentRotationy*10f);
+                    //currentRotationy = currentRotationy/10f;
 
                     Debug.Log("target" + targetRotationy); 
-                    Debug.Log("Local" + currentRotationy);
+                    //Debug.Log("Local" + currentRotationy);
+                    Debug.Log("Local" + currentRotation.y);
 
                     //interpolación
                     this.transform.rotation = Quaternion.Slerp
@@ -206,7 +207,7 @@ public class WanderSeek2 : MonoBehaviour
 
                     //cuando ha mirado hacia el lado se centra en el objetivo
                     //target rotation va de 0-1, transform rotation va de 0-360
-                    if(currentRotationy == targetRotationy || -currentRotationy == targetRotationy)
+                    if(currentRotation.y == targetRotationy || -currentRotation.y == targetRotationy)
                     {
                         inWander = false;
                     }
@@ -222,8 +223,7 @@ public class WanderSeek2 : MonoBehaviour
                     targetRotationy = targetRotationy/10f;
 
                     Quaternion currentRotation = Quaternion.Euler(this.transform.rotation.x,this.transform.rotation.y,this.transform.rotation.z);
-                    float currentRotationy = this.transform.rotation.y;
-                    currentRotationy = Mathf.Floor(currentRotationy*10f);
+                    float currentRotationy =  Mathf.Floor((1f-currentRotation.y)*10f);
                     currentRotationy = currentRotationy/10f;
 
                     Debug.Log("target" + targetRotationy); 
@@ -239,7 +239,7 @@ public class WanderSeek2 : MonoBehaviour
                         Time.deltaTime * maxspeed // Interpolation factor
                     );
 
-                    if(currentRotationy == targetRotationy || -currentRotationy == targetRotationy)
+                    if(currentRotation.y == targetRotationy || -currentRotation.y == targetRotationy)
                     {
                         inWander = true;
                         calculateWander =true;

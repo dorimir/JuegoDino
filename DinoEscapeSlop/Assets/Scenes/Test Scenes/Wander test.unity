@@ -360,8 +360,8 @@ GameObject:
   - component: {fileID: 713400786}
   - component: {fileID: 713400791}
   - component: {fileID: 713400793}
-  - component: {fileID: 713400785}
   - component: {fileID: 713400794}
+  - component: {fileID: 713400785}
   - component: {fileID: 713400790}
   m_Layer: 0
   m_Name: Cube
@@ -548,9 +548,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 713400784}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0586d5914f9ce0430a5796a85e924383, type: 3}
+  m_Script: {fileID: 11500000, guid: 392a499e048be4a1cb70b07a6454cca1, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::WanderSeek2
+  m_EditorClassIdentifier: Assembly-CSharp::WanderSeek3s
   followStrength: 0.5
 --- !u!1 &724013532
 GameObject:

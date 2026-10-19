@@ -42,7 +42,7 @@ public class WanderSeek : MonoBehaviour
             }
             else rotation(target);
             
-            forceForward(target);
+            //forceForward(target);
         }
 
         public void setTarget(Vector3 newTarget)
