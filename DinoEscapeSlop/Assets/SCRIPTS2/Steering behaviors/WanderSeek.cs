@@ -15,7 +15,7 @@ public class WanderSeek : MonoBehaviour
 
             private float maxWanderStrength = 1f; //0-1, 1 significa que el angulo de wander es igual al ratio distancia
 
-            private float step = 45f; //numero de grados por el que variará el ángulo en cada frame;
+            private float step = 5f; //numero de grados por el que variará el ángulo en cada frame;
 
             private Vector3 counterforce = new Vector3(0,0,0);
             private Vector3 force = new Vector3(0,0,0);
@@ -36,7 +36,7 @@ public class WanderSeek : MonoBehaviour
         // Update is called once per frame
         void FixedUpdate()
         {   
-            if(wander)
+            if(wandering)
             {
                 wanderRotation(target);
             }
@@ -96,7 +96,7 @@ public class WanderSeek : MonoBehaviour
 
             if(!Arrival)
             {
-                 //calculamos el radio de wander
+                 //calculamos el ratio de wander
                 float distance = Mathf.Sqrt(desired.x*desired.x + desired.z*desired.z);
                 if(distance<0) distance = -distance; //asegura que la distancia sea positiva
                 float wanderRatio = (1f-(distance/100f))*distance;
@@ -114,7 +114,7 @@ public class WanderSeek : MonoBehaviour
                 float maxWanderStrengthAngle = wanderRatioAngle * maxWanderStrength;
 
                 //decidimos la variación frame a frame
-                float rand = Random.Range(0,1);
+                int rand = Random.Range(0,1);
                 float newstep;
                 if(rand==0)
                 {
