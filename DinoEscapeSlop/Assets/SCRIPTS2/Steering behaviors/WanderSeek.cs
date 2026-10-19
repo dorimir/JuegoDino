@@ -36,13 +36,13 @@ public class WanderSeek : MonoBehaviour
         // Update is called once per frame
         void FixedUpdate()
         {   
-            if(wander)
+            if(wandering)
             {
                 wanderRotation(target);
             }
             else rotation(target);
             
-            forceForward(target);
+            //forceForward(target);
         }
 
         public void setTarget(Vector3 newTarget)

@@ -58,16 +58,16 @@ public class EnemyMovement : MonoBehaviour
         //Si el nodo actual es el ultimo
         if (targetIndex+1 >= currentPath.Count)
         {
-            this.GetComponent<ForcesSeek>().setArrival(true); 
+            this.GetComponent<WanderSeek>().setArrival(true); 
         }
         else 
         {
-            this.GetComponent<ForcesSeek>().setArrival(false); 
+            this.GetComponent<WanderSeek>().setArrival(false); 
         }
 
         // Mover hacia el nodo waypoint actual
-        this.GetComponent<ForcesSeek>().setTarget(currentWaypoint); 
-        transform.position = Vector3.MoveTowards(transform.position, currentWaypoint, speed * Time.deltaTime);
+        this.GetComponent<WanderSeek>().setTarget(currentWaypoint); 
+        //transform.position = Vector3.MoveTowards(transform.position, currentWaypoint, speed * Time.deltaTime);
 
         // Comprobaci�n de llegada al waypoint actual
         if (Vector3.Distance(transform.position, currentWaypoint) < 0.2f)
