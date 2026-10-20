@@ -444,6 +444,22 @@ public class EnemyMovement : MonoBehaviour
         {
             currentPath = null;
         }
+            
+            //BYPASS SEEK
+            Vector3 currentWaypoint = currentPath[targetIndex];
+
+            //Si el nodo actual es el ultimo
+            if (targetIndex+1 >= currentPath.Count)
+            {
+                this.GetComponent<ForcesSeek>().setArrival(true); 
+            }
+            else 
+            {
+                this.GetComponent<ForcesSeek>().setArrival(false); 
+            }
+
+            // Mover hacia el nodo waypoint actual
+            this.GetComponent<ForcesSeek>().setTarget(currentWaypoint); 
 
         Vector3 targetWaypoint;
 
