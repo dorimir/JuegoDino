@@ -1,4 +1,4 @@
-%YAML 1.1
+﻿%YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
 --- !u!1 &3223518474804865764
 GameObject:
@@ -12,6 +12,7 @@ GameObject:
   - component: {fileID: 1222261178788393184}
   - component: {fileID: 8765898045502605093}
   - component: {fileID: 102929142706205951}
+  - component: {fileID: 102929142706205952}
   - component: {fileID: 4624515889595982844}
   - component: {fileID: 5037587291426828477}
   - component: {fileID: 3071495430869612857}
@@ -283,3 +284,26 @@ Transform:
   m_CorrespondingSourceObject: {fileID: -8679921383154817045, guid: c0901832d786b744487f7131fea83654, type: 3}
   m_PrefabInstance: {fileID: 1782356398040027887}
   m_PrefabAsset: {fileID: 0}
+
+--- !u!64 &102929142706205952
+MeshCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 3223518474804865764}
+  m_Material: {fileID: 0}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_LayerOverridePriority: 0
+  m_IsTrigger: 0
+  m_ProvidesContacts: 0
+  m_Enabled: 1
+  serializedVersion: 5
+  m_Convex: 1
+  m_CookingOptions: 30
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}

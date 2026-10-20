@@ -282,4 +282,45 @@ public class AStarPathfinding : MonoBehaviour
 
         return closestReachable != null ? closestReachable : closestFallback;
     }
+
+    /// <summary>
+    /// Encuentra el nodo del grafo más alejado de un nodo de referencia.
+    /// Utilizado por el modo huida para alejarse lo máximo posible del nodo más cercano al peligro.
+    /// </summary>
+    public Node GetFarthestNodeFrom(Node referenceNode)
+    {
+        if (referenceNode == null) return null;
+        Node[] allNodes = GetAllNodes();
+        if (allNodes == null || allNodes.Length == 0) return null;
+
+        Node farthestNode = null;
+        float maxDistSqr = -1f;
+
+        Vector3 refPos = referenceNode.transform.position;
+        foreach (Node node in allNodes)
+        {
+            if (node == null || node == referenceNode) continue;
+            float dx = node.transform.position.x - refPos.x;
+            float dz = node.transform.position.z - refPos.z;
+            float distSqr = dx * dx + dz * dz;
+
+            if (distSqr > maxDistSqr)
+            {
+                maxDistSqr = distSqr;
+                farthestNode = node;
+            }
+        }
+
+        return farthestNode;
+    }
+
+    /// <summary>
+    /// Sabiendo cual es el nodo más cercano a una posición (amenaza), devuelve el nodo más alejado posible de él.
+    /// </summary>
+    public Node GetFarthestNodeFromPosition(Vector3 threatPos)
+    {
+        Node closestToThreat = GetClosestNode(threatPos);
+        if (closestToThreat == null) return null;
+        return GetFarthestNodeFrom(closestToThreat);
+    }
 }

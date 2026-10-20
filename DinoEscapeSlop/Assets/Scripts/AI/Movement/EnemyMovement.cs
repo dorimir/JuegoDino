@@ -17,10 +17,10 @@ public class EnemyMovement : MonoBehaviour
     public float patrolTurnRate = 180f;
     [Tooltip("Velocidad de rotación angular en persecución.")]
     public float chaseTurnRate = 340f;
-    [Tooltip("Fricción lateral para el derrape (drift). Valores entre 3.5 y 5.5 generan un derrape suave, natural y vistoso.")]
-    public float driftFriction = 4.2f;
-    [Tooltip("Inclinación corporal lateral (banking/roll) en grados al tomar curvas a velocidad.")]
-    public float maxBankAngle = 7.0f;
+    [Tooltip("Fricción lateral para el movimiento. Valores altos eliminan el derrape y patinaje lateral.")]
+    public float driftFriction = 35.0f;
+    [Tooltip("Inclinación corporal lateral (banking/roll) en grados al tomar curvas.")]
+    public float maxBankAngle = 1.5f;
     [Tooltip("Radio horizontal para considerar un nodo o waypoint alcanzado.")]
     public float waypointRadius = 0.75f;
 
@@ -43,10 +43,16 @@ public class EnemyMovement : MonoBehaviour
     [Tooltip("Distancia a la que el seguidor se echa a un lado al ver aproximarse al líder")]
     public float leaderGiveWayRadius = 5.0f;
 
-    private EnemyAI ai;
-    private float personalXOffset;
-    private float personalZOffset;
+    public float CurrentForwardSpeed => currentVelocity.magnitude;
+    public Vector3 Velocity => currentVelocity;
 
+    public void ResetVelocity()
+    {
+        currentVelocity = Vector3.zero;
+        currentBankAngle = 0f;
+    }
+
+    private EnemyAI ai;
     private Vector3 directTargetPosition;
     private bool hasDirectTarget = false;
 
@@ -72,17 +78,34 @@ public class EnemyMovement : MonoBehaviour
         ai = GetComponent<EnemyAI>();
         HasReachedDestination = true;
 
-        personalXOffset = Random.Range(-laneWidth * 0.5f, laneWidth * 0.5f);
-        personalZOffset = Random.Range(-1.0f, 1.0f);
         lastStuckCheckPosition = transform.position;
         lastWaypointPos = transform.position;
+
+        // Asegurar que no existan fuerzas de separación magnéticas entre dinosaurios
+        separationRadius = 0f;
+        separationStrength = 0f;
+
+        // Asignar capa "Dinosaurios" (Layer 3) a todo el dinosaurio y sus hijos para evitar colisiones internas con máscaras de pared
+        int dinoLayer = LayerMask.NameToLayer("Dinosaurios");
+        if (dinoLayer != -1)
+        {
+            gameObject.layer = dinoLayer;
+            foreach (Transform child in GetComponentsInChildren<Transform>(true))
+            {
+                child.gameObject.layer = dinoLayer;
+            }
+        }
 
         // Auto-calibrar el BoxCollider para asegurar dimensiones optimas para navegacion sin atascos
         BoxCollider box = GetComponent<BoxCollider>();
         CapsuleCollider cap = GetComponent<CapsuleCollider>();
 
-        if (ai != null && ai.IsPrey)
+        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
+
+        if (isSmall)
         {
+            patrolNodes.Clear(); // Las presas recorren toda la red conectada de nodos del mapa de forma fluida
+
             if (box != null)
             {
                 Vector3 s = box.size;
@@ -98,11 +121,12 @@ public class EnemyMovement : MonoBehaviour
                 cap.height = Mathf.Min(cap.height, 0.6f);
             }
 
-            speed = 4.5f;
-            acceleration = 12.0f;
-            patrolTurnRate = 220f;
-            chaseTurnRate = 380f;
-            driftFriction = 5.0f;
+            speed = 5.2f;
+            acceleration = 14.0f;
+            patrolTurnRate = 260f;
+            chaseTurnRate = 420f;
+            driftFriction = 45.0f; // Fricción lateral alta para eliminar derrapes y patinaje
+            maxBankAngle = 1.5f;
         }
         else
         {
@@ -122,6 +146,31 @@ public class EnemyMovement : MonoBehaviour
             {
                 cap.radius = Mathf.Min(cap.radius, 0.35f);
             }
+
+            speed = 2.4f;
+            acceleration = 9.0f;
+            patrolTurnRate = 180f;
+            chaseTurnRate = 340f;
+            driftFriction = 35.0f;
+            maxBankAngle = 1.5f;
+        }
+
+        // Asegurar que el dinosaurio posee un MeshCollider con convex = true
+        MeshCollider meshCol = GetComponent<MeshCollider>();
+        if (meshCol == null) meshCol = GetComponentInChildren<MeshCollider>();
+        if (meshCol == null)
+        {
+            meshCol = gameObject.AddComponent<MeshCollider>();
+            meshCol.convex = true;
+            MeshFilter mf = GetComponentInChildren<MeshFilter>();
+            if (mf != null && mf.sharedMesh != null)
+            {
+                meshCol.sharedMesh = mf.sharedMesh;
+            }
+        }
+        else
+        {
+            meshCol.convex = true;
         }
     }
 
@@ -131,85 +180,56 @@ public class EnemyMovement : MonoBehaviour
         if (pathfinding == null) pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
         if (ai == null) ai = GetComponent<EnemyAI>();
 
-        // Asegurar que si el enemigo es líder o autónomo y tiene nodos de patrulla, aparezca exactamente en un nodo
-        if (patrolNodes != null && patrolNodes.Count > 0 && patrolNodes[0] != null)
+        // Si es dinosaurio pequeño y ya tiene su camino asignado (por DistributePreyAcrossMap), no sobreescribir
+        if (ai != null && ai.IsSmallDino)
         {
-            if (ai == null || ai.isLeader || ai.leaderTransform == null)
+            if (HasReachedDestination)
             {
-                Vector3 nodePos = patrolNodes[0].transform.position;
-                transform.position = new Vector3(nodePos.x, transform.position.y, nodePos.z);
+                GoToNextPatrolNode();
             }
-        }
-        else if (ai != null && !ai.isLeader && ai.leaderTransform != null)
-        {
-            // Para seguidores, asegurar que aparezcan en su ranura designada sin solaparse
-            float distToLeader = Vector3.Distance(transform.position, ai.leaderTransform.position);
-            if (distToLeader > 8f || distToLeader < 0.4f)
-            {
-                int slot = ai.FollowerIndex;
-                if (slot < 0) slot = 0;
-                Vector3 slotLocal = EnemyAI.GetFormationSlotLocal(slot);
-                Vector3 spawnPos = ai.leaderTransform.position + (ai.leaderTransform.rotation * slotLocal);
-                spawnPos.y = transform.position.y;
-                transform.position = spawnPos;
-            }
+            return;
         }
 
-        // Si no tiene EnemyAI (objeto independiente de prueba como Cube), iniciar patrulla
-        if (ai == null && patrolNodes != null && patrolNodes.Count > 0)
+        if (patrolNodes != null && patrolNodes.Count > 0)
         {
             GoToNextPatrolNode();
+        }
+        else
+        {
+            GoToNearestPatrolNode();
         }
     }
 
     void Update()
     {
-        bool isChasing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.ChaseState);
-        bool isFleeing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.FleeState);
+        FollowPathAStar();
 
-        // El Líder, cualquier enemigo en persecución / huida, o sin líder, se mueve con navegación autónoma
-        if (ai == null || ai.isLeader || isChasing || isFleeing || ai.leaderTransform == null)
+        // Si es un objeto autónomo sin EnemyAI y llegó al destino, pasar automáticamente al siguiente nodo
+        if (ai == null && HasReachedDestination && patrolNodes != null && patrolNodes.Count > 0)
         {
-            FollowPathAStar();
-
-            // Si es un objeto autónomo sin EnemyAI y llegó al destino, pasar automáticamente al siguiente nodo
-            if (ai == null && HasReachedDestination && patrolNodes != null && patrolNodes.Count > 0)
-            {
-                GoToNextPatrolNode();
-            }
-        }
-        else
-        {
-            // Para seguidores: si están separados del líder (sin línea directa por paredes tras una persecución),
-            // usan la red de nodos como guía hasta volver a tenerlo a la vista
-            if (ai.leaderTransform != null && !HasClearLineTo(ai.leaderTransform.position) && currentPath != null && currentPath.Count > 0)
-            {
-                FollowPathAStar();
-            }
-            else
-            {
-                // En cuanto tienen línea de visión despejada, siguen la formación en cuña alrededor del Líder
-                FollowLeaderDirect();
-            }
+            GoToNextPatrolNode();
         }
 
-        // Resolución de solapamiento físico entre dinosaurios (no se pueden atravesar)
+        // Resolución física suave de solapamiento físico entre dinosaurios (evita traspasarse)
         ResolveMutualCollisions();
     }
 
     void LateUpdate()
     {
-        // Garantizar al final de cada frame que los dinosaurios nunca se traspasen
-        ResolveMutualCollisions();
     }
 
     /// <summary>
     /// Comprueba si existe una trayectoria libre de paredes u obstáculos sólidos
     /// entre el dinosaurio y la posición destino (en el plano horizontal a la altura del torso).
     /// </summary>
-    public bool HasClearLineTo(Vector3 targetPosition, float clearanceRadius = 0.35f)
+    public bool HasClearLineTo(Vector3 targetPosition, float clearanceRadius = -1f)
     {
-        float rayHeight = 0.75f;
+        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
+        if (clearanceRadius < 0f)
+        {
+            clearanceRadius = isSmall ? 0.20f : 0.35f;
+        }
+        float rayHeight = isSmall ? 0.45f : 0.85f;
         Vector3 origin = new Vector3(transform.position.x, transform.position.y + rayHeight, transform.position.z);
         Vector3 target = new Vector3(targetPosition.x, transform.position.y + rayHeight, targetPosition.z);
         Vector3 dir = target - origin;
@@ -223,7 +243,8 @@ public class EnemyMovement : MonoBehaviour
         // 1. Linecast directo: detecta muros o esquinas intermedias
         if (Physics.Linecast(origin, target, out RaycastHit lineHit, wallLayerMask, QueryTriggerInteraction.Ignore))
         {
-            if (lineHit.collider != null && !lineHit.collider.transform.IsChildOf(transform) && !lineHit.collider.CompareTag("Enemy"))
+            bool isEnemy = lineHit.collider != null && (lineHit.collider.CompareTag("Enemy") || lineHit.collider.GetComponentInParent<EnemyAI>() != null);
+            if (lineHit.collider != null && !lineHit.collider.transform.IsChildOf(transform) && !isEnemy)
             {
                 bool isTargetPlayer = (ai != null && ai.Player != null && (lineHit.transform == ai.Player || lineHit.transform.IsChildOf(ai.Player)));
                 if (!isTargetPlayer && lineHit.normal.y < 0.7f)
@@ -244,9 +265,13 @@ public class EnemyMovement : MonoBehaviour
             {
                 if (hit.collider == null) continue;
                 if (hit.transform == transform || hit.transform.IsChildOf(transform)) continue;
-                if (hit.collider.CompareTag("Enemy")) continue;
+                bool isOtherEnemy = hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null;
+                if (isOtherEnemy) continue;
                 if (ai != null && ai.Player != null && (hit.transform == ai.Player || hit.transform.IsChildOf(ai.Player))) continue;
                 if (hit.normal.y >= 0.7f) continue; // Suelo o rampas
+
+                string colName = hit.collider.gameObject.name.ToLower();
+                if (colName.Contains("plane") || colName.Contains("floor") || colName.Contains("suelo")) continue;
 
                 return false;
             }
@@ -310,9 +335,10 @@ public class EnemyMovement : MonoBehaviour
         stuckTimer = 0f;
 
         bool isChasing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.ChaseState);
+        bool isFollower = (ai != null && ai.IsSmallDino && ai.LeaderAI != null);
 
-        // 1. Si está persiguiendo y hay línea directa despejada al objetivo, SALIR de la red de nodos y perseguir directo
-        if (isChasing && HasClearLineTo(targetPosition))
+        // 1. Si está persiguiendo o siguiendo al líder en manada y hay línea directa despejada, avanzar directo
+        if ((isChasing || isFollower) && HasClearLineTo(targetPosition))
         {
             currentPath = null;
             targetIndex = 0;
@@ -320,7 +346,8 @@ public class EnemyMovement : MonoBehaviour
                 new Vector2(transform.position.x, transform.position.z),
                 new Vector2(targetPosition.x, targetPosition.z)
             );
-            HasReachedDestination = (horizontalDist <= waypointRadius);
+            float stopDist = isChasing ? 0.15f : (isFollower ? 0.35f : waypointRadius);
+            HasReachedDestination = (horizontalDist <= stopDist);
             lastWaypointPos = transform.position;
             return;
         }
@@ -353,6 +380,19 @@ public class EnemyMovement : MonoBehaviour
                     {
                         targetIndex = 1;
                     }
+                    else if (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.FleeState)
+                    {
+                        // En huida, comprobar que el primer nodo del camino no acerque al pequeño hacia el dinosaurio grande
+                        Vector3 threatPos = (ai.ChasingPredator != null) ? ai.ChasingPredator.transform.position : 
+                                            ((ai.CurrentThreat != null) ? ai.CurrentThreat.position : ai.SpottedThreatPosition);
+                        float myDistToThreat = Vector3.Distance(transform.position, threatPos);
+                        float firstDistToThreat = Vector3.Distance(currentPath[0], threatPos);
+
+                        if (firstDistToThreat < myDistToThreat)
+                        {
+                            targetIndex = 1;
+                        }
+                    }
                 }
 
                 HasReachedDestination = false;
@@ -380,13 +420,27 @@ public class EnemyMovement : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Establece un objetivo de persecución directo y continuo en tiempo real (evita frenados y paradas arbitrarias).
+    /// </summary>
+    public void SetDirectChaseTarget(Vector3 targetPos)
+    {
+        directTargetPosition = targetPos;
+        hasDirectTarget = true;
+        currentPath = null;
+        targetIndex = 0;
+        HasReachedDestination = false;
+        lastWaypointPos = transform.position;
+    }
+
     void FollowPathAStar()
     {
         bool isChasing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.ChaseState);
+        bool isFollower = (ai != null && ai.IsSmallDino && ai.LeaderAI != null);
 
-        // 1. Durante la persecución: en cuanto se gire la esquina y haya línea de visión directa al jugador,
-        // se abandona la guía de nodos inmediatamente para perseguir de forma directa:
-        if (isChasing && hasDirectTarget && HasClearLineTo(directTargetPosition))
+        // 1. Durante la persecución o seguimiento del líder: en cuanto se gire la esquina y haya línea de visión directa,
+        // se abandona la guía de nodos inmediatamente para moverse de forma directa:
+        if ((isChasing || isFollower) && hasDirectTarget && HasClearLineTo(directTargetPosition))
         {
             currentPath = null;
         }
@@ -413,21 +467,30 @@ public class EnemyMovement : MonoBehaviour
         float distToWaypoint = toWaypoint.magnitude;
         Vector3 desiredDirection = distToWaypoint > 0.001f ? toWaypoint.normalized : transform.forward;
 
-        // --- COMPROBACIÓN ESTRICTA DE LLEGADA AL NODO (DEBE PASAR POR EL NODO) ---
-        Vector3 previousPos = (currentPath != null && targetIndex > 0) ? currentPath[targetIndex - 1] : lastWaypointPos;
-        Vector3 segmentDir = new Vector3(targetWaypoint.x - previousPos.x, 0f, targetWaypoint.z - previousPos.z);
-        bool hasPassedWaypointPlane = false;
-
-        if (segmentDir.sqrMagnitude > 0.05f)
+        // --- COMPROBACIÓN DE LLEGADA AL WAYPOINT O NODO ---
+        bool reachedWaypoint;
+        if (currentPath != null && currentPath.Count > 0)
         {
-            Vector3 pastVector = new Vector3(transform.position.x - targetWaypoint.x, 0f, transform.position.z - targetWaypoint.z);
-            // Solo se considera superado si está físicamente en el entorno del nodo (<= 1.25x waypointRadius) y cruzó el plano
-            hasPassedWaypointPlane = (Vector3.Dot(pastVector, segmentDir.normalized) > 0f) && (distToWaypoint <= waypointRadius * 1.25f);
+            Vector3 previousPos = (targetIndex > 0) ? currentPath[targetIndex - 1] : lastWaypointPos;
+            Vector3 segmentDir = new Vector3(targetWaypoint.x - previousPos.x, 0f, targetWaypoint.z - previousPos.z);
+            bool hasPassedWaypointPlane = false;
+
+            if (segmentDir.sqrMagnitude > 0.05f)
+            {
+                Vector3 pastVector = new Vector3(transform.position.x - targetWaypoint.x, 0f, transform.position.z - targetWaypoint.z);
+                hasPassedWaypointPlane = (Vector3.Dot(pastVector, segmentDir.normalized) > 0f) && (distToWaypoint <= waypointRadius * 1.25f);
+            }
+
+            reachedWaypoint = (distToWaypoint <= waypointRadius) || hasPassedWaypointPlane;
+        }
+        else
+        {
+            // Persecución directa continua o seguimiento de líder:
+            float stopDist = isChasing ? 0.15f : (isFollower ? 0.35f : waypointRadius);
+            reachedWaypoint = (distToWaypoint <= stopDist);
         }
 
-        bool reachedWaypoint = (distToWaypoint <= waypointRadius) || hasPassedWaypointPlane;
-
-        // Avanzar al siguiente nodo de la ruta ÚNICAMENTE cuando se ha alcanzado físicamente el nodo actual
+        // Avanzar al siguiente nodo de la ruta
         if (reachedWaypoint)
         {
             lastWaypointPos = targetWaypoint;
@@ -443,11 +506,25 @@ public class EnemyMovement : MonoBehaviour
             }
             else
             {
-                // Fin de la ruta: se ha llegado al último nodo
+                // Fin de la ruta de nodos
                 currentPath = null;
-                hasDirectTarget = false;
-                HasReachedDestination = true;
-                return;
+                if (isChasing || isFollower)
+                {
+                    // En persecución o seguimiento, se continúa al objetivo sin apagar el avance bruscamente
+                    float stopDist = isChasing ? 0.15f : (isFollower ? 0.35f : waypointRadius);
+                    HasReachedDestination = (distToWaypoint <= stopDist);
+                    if (HasReachedDestination)
+                    {
+                        hasDirectTarget = false;
+                        return;
+                    }
+                }
+                else
+                {
+                    hasDirectTarget = false;
+                    HasReachedDestination = true;
+                    return;
+                }
             }
         }
 
@@ -506,7 +583,7 @@ public class EnemyMovement : MonoBehaviour
             transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, currentTurnRate * Time.deltaTime);
         }
 
-        // --- FÍSICAS DE DRIFT / DERRAPE NATURAL (INERCIA Y FRICCIÓN LATERAL) ---
+        // --- CONTROL DIRECTO DE VELOCIDAD (DRIFT REBAJADO CONSIDERABLEMENTE) ---
         Vector3 forwardDir = transform.forward;
         Vector3 rightDir = transform.right;
 
@@ -517,12 +594,11 @@ public class EnemyMovement : MonoBehaviour
         // Aceleración hacia adelante hacia la velocidad deseada
         forwardSpeed = Mathf.MoveTowards(forwardSpeed, targetSpeed, acceleration * Time.deltaTime);
 
-        // Derrape lateral: la velocidad lateral no se elimina de golpe,
-        // decae con driftFriction permitiendo que el dinosaurio derrape hacia afuera en la curva
-        lateralSpeed = Mathf.MoveTowards(lateralSpeed, 0f, driftFriction * Time.deltaTime);
+        // Derrape lateral fuertemente rebajado: se amortigua de inmediato para evitar que el dinosaurio patine
+        lateralSpeed = Mathf.MoveTowards(lateralSpeed, 0f, Mathf.Max(driftFriction, 45.0f) * Time.deltaTime);
 
-        // Reconstruir vector de velocidad en el plano horizontal
-        currentVelocity = (forwardDir * forwardSpeed) + (rightDir * lateralSpeed);
+        // Reconstruir vector de velocidad en el plano horizontal eliminando el patinaje lateral
+        currentVelocity = (forwardDir * forwardSpeed) + (rightDir * (lateralSpeed * 0.05f));
 
         // --- INCLINACIÓN CORPORAL (BANKING ROLL VISUAL) ---
         float signedTurn = Vector3.SignedAngle(forwardDir, desiredDirection, Vector3.up);
@@ -535,27 +611,31 @@ public class EnemyMovement : MonoBehaviour
 
         // --- DESPLAZAMIENTO SEGURO (PAREDES + DINOSAURIOS SÓLIDOS) ---
         Vector3 displacement = currentVelocity * Time.deltaTime;
-        float bodyRadius = (ai != null && ai.IsPrey) ? 0.22f : 0.35f;
+        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
+        float bodyRadius = isSmall ? 0.20f : 0.35f;
         MoveSafely(displacement, bodyRadius);
     }
 
     /// <summary>
     /// Desplaza al dinosaurio resolviendo deslizamiento por paredes y bloqueando penetración contra otros dinosaurios.
     /// </summary>
-    private void MoveSafely(Vector3 displacement, float bodyRadius = 0.28f)
+    private void MoveSafely(Vector3 displacement, float bodyRadius = 0.20f)
     {
         displacement.y = 0f;
         if (displacement.sqrMagnitude < 0.000001f) return;
 
+        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
         float moveDist = displacement.magnitude;
         Vector3 moveDir = displacement / moveDist;
-        Vector3 rayOrigin = transform.position + Vector3.up * 0.75f;
+        float rayHeight = isSmall ? 0.45f : 0.85f;
+        Vector3 rayOrigin = transform.position + Vector3.up * rayHeight;
         int wallMask = ~((1 << 3) | (1 << 2));
 
-        // 1. Deslizamiento sobre paredes
-        if (Physics.SphereCast(rayOrigin, bodyRadius, moveDir, out RaycastHit hit, moveDist + 0.1f, wallMask, QueryTriggerInteraction.Ignore))
+        // 1. Deslizamiento sobre paredes verticales (evita chocar o atravesar esquinas)
+        if (Physics.SphereCast(rayOrigin, bodyRadius, moveDir, out RaycastHit hit, moveDist + 0.05f, wallMask, QueryTriggerInteraction.Ignore))
         {
-            if (hit.transform != transform && !hit.transform.IsChildOf(transform) && !hit.collider.CompareTag("Enemy") && hit.normal.y < 0.7f)
+            bool isEnemy = hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null;
+            if (hit.transform != transform && !hit.transform.IsChildOf(transform) && !isEnemy && hit.normal.y < 0.7f)
             {
                 if (ai == null || ai.Player == null || (hit.transform != ai.Player && !hit.transform.IsChildOf(ai.Player)))
                 {
@@ -567,7 +647,7 @@ public class EnemyMovement : MonoBehaviour
             }
         }
 
-        // 2. Bloqueo de avance contra otros dinosaurios (No se pueden atravesar)
+        // 2. Bloqueo de avance contra otros dinosaurios (solo en contacto físico real)
         if (EnemyAI.AllEnemies != null && EnemyAI.AllEnemies.Count > 0)
         {
             for (int i = 0; i < EnemyAI.AllEnemies.Count; i++)
@@ -578,11 +658,11 @@ public class EnemyMovement : MonoBehaviour
                 Vector3 toOther = other.transform.position - transform.position;
                 toOther.y = 0f;
                 float dist = toOther.magnitude;
-                float minSeparation = (ai != null && ai.IsPrey && other.IsPrey) ? 0.75f : 1.35f;
+                float physicalContactDist = (ai != null && ai.IsSmallDino && other.IsSmallDino) ? 0.38f : 0.95f;
 
-                if (dist < minSeparation + 0.35f)
+                if (dist < physicalContactDist && dist > 0.001f)
                 {
-                    Vector3 dirToOther = (dist > 0.001f) ? (toOther / dist) : transform.forward;
+                    Vector3 dirToOther = toOther / dist;
                     float approachComponent = Vector3.Dot(displacement, dirToOther);
 
                     if (approachComponent > 0f)
@@ -594,10 +674,42 @@ public class EnemyMovement : MonoBehaviour
         }
 
         transform.position += displacement;
+
+        // 3. Depenetración suave contra muros verticales (ignora completamente suelos y planos horizontales)
+        Vector3 curOrigin = transform.position + Vector3.up * rayHeight;
+        Collider[] nearbyWalls = Physics.OverlapSphere(curOrigin, bodyRadius, wallMask, QueryTriggerInteraction.Ignore);
+        for (int w = 0; w < nearbyWalls.Length; w++)
+        {
+            Collider wallCol = nearbyWalls[w];
+            if (wallCol.transform == transform || wallCol.transform.IsChildOf(transform)) continue;
+            bool isEnemy = wallCol.CompareTag("Enemy") || wallCol.GetComponentInParent<EnemyAI>() != null;
+            if (isEnemy) continue;
+            if (ai != null && ai.Player != null && (wallCol.transform == ai.Player || wallCol.transform.IsChildOf(ai.Player))) continue;
+
+            // Descartar suelos o planos horizontales
+            string colName = wallCol.gameObject.name.ToLower();
+            if (colName.Contains("plane") || colName.Contains("floor") || colName.Contains("suelo")) continue;
+
+            Vector3 closest = wallCol.ClosestPoint(curOrigin);
+            // Si el punto más cercano está a nivel de suelo, es el suelo: ignorar
+            if (closest.y < transform.position.y + 0.15f) continue;
+
+            Vector3 diff = curOrigin - closest;
+            diff.y = 0f;
+            float dist = diff.magnitude;
+
+            if (dist < bodyRadius && dist > 0.005f)
+            {
+                Vector3 pushOut = (diff / dist) * (bodyRadius - dist);
+                transform.position += pushOut;
+                curOrigin += pushOut;
+            }
+        }
     }
 
     /// <summary>
-    /// Resuelve de forma física e inmediata cualquier solapamiento entre dinosaurios para impedir que se atraviesen.
+    /// Resuelve de forma física suave cualquier solapamiento físico entre dinosaurios para impedir que se atraviesen,
+    /// eliminando cualquier fuerza de rebote o repulsión magnética artificial a distancia.
     /// </summary>
     private void ResolveMutualCollisions()
     {
@@ -613,7 +725,8 @@ public class EnemyMovement : MonoBehaviour
             Vector3 diff = transform.position - other.transform.position;
             diff.y = 0f;
             float dist = diff.magnitude;
-            float requiredDist = (ai != null && ai.IsPrey && other.IsPrey) ? 0.85f : 1.45f;
+            // Solo actuar en caso de verdadera interpenetración física de mallas/cuerpos
+            float requiredDist = (ai != null && ai.IsSmallDino && other.IsSmallDino) ? 0.36f : 0.90f;
 
             if (dist < requiredDist)
             {
@@ -629,7 +742,7 @@ public class EnemyMovement : MonoBehaviour
                     pushDir = (GetInstanceID() > other.GetInstanceID()) ? transform.right : -transform.right;
                 }
 
-                // Prioridad: Si uno es el líder y el otro seguidor, el líder manda y el seguidor cede el 100%
+                // Distribución de depenetración: el líder no cede, el seguidor amortigua suavemente
                 float myWeight = 0.5f;
                 if (ai != null && other != null)
                 {
@@ -637,10 +750,12 @@ public class EnemyMovement : MonoBehaviour
                     else if (!ai.isLeader && other.isLeader) myWeight = 1.0f;
                 }
 
-                Vector3 push = pushDir * (overlap * myWeight);
+                // Factor suave (0.25f) para evitar sacudidas o rebotes de resorte
+                Vector3 push = pushDir * (overlap * myWeight * 0.25f);
                 if (push.sqrMagnitude > 0.00001f)
                 {
-                    Vector3 checkOrigin = transform.position + Vector3.up * 0.75f;
+                    float rayHeight = (ai != null && ai.IsSmallDino) ? 0.35f : 0.75f;
+                    Vector3 checkOrigin = transform.position + Vector3.up * rayHeight;
                     if (!Physics.SphereCast(checkOrigin, 0.2f, push.normalized, out RaycastHit wallHit, push.magnitude + 0.1f, wallMask, QueryTriggerInteraction.Ignore))
                     {
                         transform.position += push;
@@ -656,198 +771,6 @@ public class EnemyMovement : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Comprueba la distancia libre lateral antes de colisionar con una pared para adaptar el ancho de la formación.
-    /// </summary>
-    private float GetSideClearance(Vector3 origin, Vector3 direction, float maxRange = 3.0f)
-    {
-        int wallMask = ~((1 << 3) | (1 << 2));
-        Vector3 rayStart = origin + Vector3.up * 0.75f;
-        if (Physics.Raycast(rayStart, direction.normalized, out RaycastHit hit, maxRange, wallMask, QueryTriggerInteraction.Ignore))
-        {
-            if (hit.normal.y < 0.7f)
-            {
-                return hit.distance;
-            }
-        }
-        return maxRange;
-    }
-
-    // --- SEGUIMIENTO EN FORMACIÓN (MANADA DE PRESAS ORGÁNICA) ---
-    void FollowLeaderDirect()
-    {
-        if (ai == null || ai.leaderTransform == null) return;
-
-        Transform leader = ai.leaderTransform;
-        Vector3 leaderForward = leader.forward;
-        Vector3 leaderRight = leader.right;
-
-        // 1. Obtener ranura designada en la cuña / V-formation
-        int slotIndex = ai.FollowerIndex;
-        if (slotIndex < 0) slotIndex = 0;
-        Vector3 slotLocal = EnemyAI.GetFormationSlotLocal(slotIndex);
-
-        // 2. Adaptación orgánica al ancho del pasillo (evita que la formación choque con paredes laterales)
-        float leftClearance = GetSideClearance(leader.position, -leaderRight, 3.0f);
-        float rightClearance = GetSideClearance(leader.position, leaderRight, 3.0f);
-
-        float clampedX = slotLocal.x;
-        if (slotLocal.x < 0f)
-        {
-            float maxLeft = Mathf.Max(0.45f, leftClearance - 0.45f);
-            clampedX = -Mathf.Min(Mathf.Abs(slotLocal.x), maxLeft);
-        }
-        else if (slotLocal.x > 0f)
-        {
-            float maxRight = Mathf.Max(0.45f, rightClearance - 0.45f);
-            clampedX = Mathf.Min(slotLocal.x, maxRight);
-        }
-
-        Vector3 targetFormationPos = leader.position
-            + (leaderForward * slotLocal.z)
-            + (leaderRight * clampedX);
-        targetFormationPos.y = transform.position.y;
-
-        // 3. Separación sutil entre seguidores
-        Vector3 separationPush = CalculateSeparationPush();
-        Vector3 finalTarget = targetFormationPos + separationPush;
-
-        Vector3 toTarget = finalTarget - transform.position;
-        toTarget.y = 0f;
-        float distanceToTarget = toTarget.magnitude;
-
-        // 4. Velocidad del líder para sincronizar el paso de la manada
-        float leaderCurrentSpeed = (ai.LeaderAI != null && ai.LeaderAI.Movement != null)
-            ? ai.LeaderAI.Movement.currentVelocity.magnitude
-            : speed;
-
-        bool isLeaderMoving = leaderCurrentSpeed > 0.35f;
-
-        // 5. Dirección y regulación de velocidad de formación
-        float targetSpeed = 0f;
-        Vector3 desiredDir = leaderForward;
-
-        if (isLeaderMoving)
-        {
-            HasReachedDestination = false;
-
-            if (distanceToTarget > 1.2f)
-            {
-                // Quedando atrás: acelerar para mantener la formación compacta
-                targetSpeed = Mathf.Max(speed, leaderCurrentSpeed * 1.35f);
-                desiredDir = toTarget.normalized;
-            }
-            else if (distanceToTarget < 0.35f)
-            {
-                // En posición óptima: mantener la velocidad del líder
-                targetSpeed = leaderCurrentSpeed;
-                desiredDir = (toTarget.sqrMagnitude > 0.001f) ? Vector3.Lerp(leaderForward, toTarget.normalized, 0.4f) : leaderForward;
-            }
-            else
-            {
-                // Ajustando distancia dentro de la ranura
-                targetSpeed = Mathf.Lerp(leaderCurrentSpeed * 0.7f, leaderCurrentSpeed * 1.2f, distanceToTarget / 1.2f);
-                desiredDir = toTarget.normalized;
-            }
-        }
-        else
-        {
-            // El líder está quieto / esperando
-            if (distanceToTarget > 0.35f)
-            {
-                HasReachedDestination = false;
-                targetSpeed = speed * 0.75f;
-                desiredDir = toTarget.normalized;
-            }
-            else
-            {
-                HasReachedDestination = true;
-                targetSpeed = 0f;
-                desiredDir = leaderForward;
-                transform.rotation = Quaternion.Slerp(transform.rotation, leader.rotation, Time.deltaTime * 6f);
-            }
-        }
-
-        // 6. Rotación corporal hacia la dirección deseada
-        if (desiredDir.sqrMagnitude > 0.001f)
-        {
-            Quaternion targetRot = Quaternion.LookRotation(desiredDir, Vector3.up);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, patrolTurnRate * Time.deltaTime);
-        }
-
-        // 7. Físicas de inercia y drift natural del seguidor
-        Vector3 fwd = transform.forward;
-        Vector3 rgt = transform.right;
-
-        float fwdSpeed = Vector3.Dot(currentVelocity, fwd);
-        float latSpeed = Vector3.Dot(currentVelocity, rgt);
-
-        fwdSpeed = Mathf.MoveTowards(fwdSpeed, targetSpeed, acceleration * Time.deltaTime);
-        latSpeed = Mathf.MoveTowards(latSpeed, 0f, driftFriction * Time.deltaTime);
-
-        currentVelocity = (fwd * fwdSpeed) + (rgt * latSpeed);
-
-        // 8. Inclinación corporal (Banking Roll)
-        float signedTurn = Vector3.SignedAngle(fwd, desiredDir, Vector3.up);
-        float targetBank = Mathf.Clamp(-signedTurn * 0.12f, -maxBankAngle, maxBankAngle);
-        currentBankAngle = Mathf.Lerp(currentBankAngle, targetBank, Time.deltaTime * 6f);
-        Quaternion horizontalRot = Quaternion.Euler(0f, transform.eulerAngles.y, 0f);
-        transform.rotation = horizontalRot * Quaternion.Euler(0f, 0f, currentBankAngle);
-
-        // 9. Desplazamiento seguro con colisiones activas (Paredes + Otros dinosaurios)
-        Vector3 displacement = currentVelocity * Time.deltaTime;
-        float bodyRadius = (ai != null && ai.IsPrey) ? 0.22f : 0.35f;
-        MoveSafely(displacement, bodyRadius);
-    }
-
-    private Vector3 CalculateSeparationPush()
-    {
-        Vector3 push = Vector3.zero;
-        Collider[] hitColliders = Physics.OverlapSphere(transform.position, leaderGiveWayRadius > 0.1f ? leaderGiveWayRadius : 2.5f);
-        int count = 0;
-
-        foreach (var hit in hitColliders)
-        {
-            if (hit.gameObject != gameObject && hit.CompareTag("Enemy"))
-            {
-                EnemyAI otherAI = hit.GetComponent<EnemyAI>();
-                Vector3 away = transform.position - hit.transform.position;
-                away.y = 0;
-                float dist = away.magnitude;
-
-                // CASO A: EL OTRO ES EL LÍDER -> Apartarse con fuerza hacia los lados
-                if (otherAI != null && otherAI.isLeader)
-                {
-                    float giveWay = leaderGiveWayRadius > 0.1f ? leaderGiveWayRadius : 2.5f;
-                    if (dist > 0.001f && dist < giveWay)
-                    {
-                        Vector3 sidePush = Vector3.Cross(hit.transform.forward, Vector3.up);
-                        if (Vector3.Dot(away, sidePush) < 0)
-                        {
-                            sidePush = -sidePush;
-                        }
-
-                        push += sidePush.normalized * (giveWay - dist) * 2.5f;
-                        count++;
-                    }
-                }
-                // CASO B: EL OTRO ES UN SEGUIDOR -> Separación entre aliados
-                else if (dist > 0.001f && dist < separationRadius)
-                {
-                    push += (away.normalized / dist) * separationStrength;
-                    count++;
-                }
-            }
-        }
-
-        if (count > 0)
-        {
-            push = Vector3.ClampMagnitude(push, 2.0f);
-        }
-
-        return push;
-    }
-
     public void ClearPath()
     {
         currentPath = null;
@@ -857,17 +780,152 @@ public class EnemyMovement : MonoBehaviour
         currentVelocity = Vector3.zero;
     }
 
+    public void SetCurrentDestinationNode(Node node)
+    {
+        currentDestinationNode = node;
+        if (node != null && !recentlyVisitedNodes.Contains(node))
+        {
+            recentlyVisitedNodes.Add(node);
+        }
+    }
+
+    // Historial reciente de nodos visitados para recorrer toda la red de nodos sin ciclos repetitivos
+    private readonly List<Node> recentlyVisitedNodes = new List<Node>();
+    private const int MaxRecentNodesHistory = 14;
+    private Node currentDestinationNode;
+
+    /// <summary>
+    /// Selecciona el siguiente nodo de patrulla navegando por toda la red de nodos conectada.
+    /// Prioriza vecinos no visitados recientemente y mantiene una dirección de avance fluida para recorrer el mapa entero.
+    /// </summary>
+    public Node GetNextNetworkPatrolNode()
+    {
+        if (pathfinding == null)
+        {
+            pathfinding = GetComponent<AStarPathfinding>();
+            if (pathfinding == null) pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
+        }
+
+        Node currentNode = (currentDestinationNode != null) ? currentDestinationNode : GetNearestPatrolOrGraphNode();
+        if (currentNode == null) return null;
+
+        // Registrar nodo actual en el historial reciente
+        if (!recentlyVisitedNodes.Contains(currentNode))
+        {
+            recentlyVisitedNodes.Add(currentNode);
+            if (recentlyVisitedNodes.Count > MaxRecentNodesHistory)
+            {
+                recentlyVisitedNodes.RemoveAt(0);
+            }
+        }
+
+        // Buscar entre los vecinos conectados directamente en el grafo con seguridad comprobada por Raycast
+        if (currentNode.neighbors != null && currentNode.neighbors.Count > 0)
+        {
+            List<Node> validNeighbors = currentNode.neighbors.FindAll(n => n != null && CanMoveToNode(n));
+            if (validNeighbors.Count == 0)
+            {
+                validNeighbors = currentNode.neighbors.FindAll(n => n != null);
+            }
+
+            if (validNeighbors.Count > 0)
+            {
+                // 1. Filtrar vecinos que NO hayan sido visitados recientemente
+                List<Node> unvisitedNeighbors = validNeighbors.FindAll(n => !recentlyVisitedNodes.Contains(n));
+
+                if (unvisitedNeighbors.Count > 0)
+                {
+                    // Priorizar el vecino que mantenga el avance más frontal (menor giro brusco)
+                    Node bestNeighbor = unvisitedNeighbors[0];
+                    float bestScore = -2f;
+                    Vector3 fwd = transform.forward;
+                    fwd.y = 0f;
+
+                    for (int i = 0; i < unvisitedNeighbors.Count; i++)
+                    {
+                        Vector3 toNeighbor = unvisitedNeighbors[i].transform.position - transform.position;
+                        toNeighbor.y = 0f;
+                        if (toNeighbor.sqrMagnitude > 0.001f)
+                        {
+                            float dot = Vector3.Dot(fwd.normalized, toNeighbor.normalized);
+                            if (dot > bestScore)
+                            {
+                                bestScore = dot;
+                                bestNeighbor = unvisitedNeighbors[i];
+                            }
+                        }
+                    }
+                    return bestNeighbor;
+                }
+                else
+                {
+                    // Todos los vecinos ya fueron visitados: elegir el MENOS recientemente visitado
+                    Node leastRecent = validNeighbors[0];
+                    int lowestIndex = int.MaxValue;
+
+                    for (int i = 0; i < validNeighbors.Count; i++)
+                    {
+                        int idx = recentlyVisitedNodes.IndexOf(validNeighbors[i]);
+                        if (idx < lowestIndex)
+                        {
+                            lowestIndex = idx;
+                            leastRecent = validNeighbors[i];
+                        }
+                    }
+                    return leastRecent;
+                }
+            }
+        }
+
+        // Fallback: si no hay vecinos inmediatos, buscar cualquier nodo del grafo que no esté en historial
+        Node[] allNodes = (pathfinding != null) ? pathfinding.GetAllNodes() : null;
+        if (allNodes != null && allNodes.Length > 0)
+        {
+            for (int i = 0; i < allNodes.Length; i++)
+            {
+                if (allNodes[i] != null && allNodes[i] != currentNode && !recentlyVisitedNodes.Contains(allNodes[i]))
+                {
+                    return allNodes[i];
+                }
+            }
+        }
+
+        return null;
+    }
+
     public void GoToNextPatrolNode()
     {
+        // Para dinosaurios presa (pequeños): patrullar toda la red de nodos
+        if (ai != null && ai.IsSmallDino)
+        {
+            Node nextNetworkNode = GetNextNetworkPatrolNode();
+            if (nextNetworkNode != null)
+            {
+                currentDestinationNode = nextNetworkNode;
+                MoveTo(nextNetworkNode.transform.position);
+                return;
+            }
+        }
+
         if (patrolNodes != null && patrolNodes.Count > 0)
         {
             List<Node> validNodes = patrolNodes.FindAll(n => n != null);
             if (validNodes.Count > 0)
             {
                 currentPatrolIndex = (currentPatrolIndex + 1) % validNodes.Count;
-                MoveTo(validNodes[currentPatrolIndex].transform.position);
+                currentDestinationNode = validNodes[currentPatrolIndex];
+                MoveTo(currentDestinationNode.transform.position);
                 return;
             }
+        }
+
+        // Si no tiene patrolNodes fijos, recorrer la red de nodos del mapa
+        Node fallbackNetworkNode = GetNextNetworkPatrolNode();
+        if (fallbackNetworkNode != null)
+        {
+            currentDestinationNode = fallbackNetworkNode;
+            MoveTo(fallbackNetworkNode.transform.position);
+            return;
         }
 
         GoToRandomNode();
@@ -936,6 +994,22 @@ public class EnemyMovement : MonoBehaviour
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Envía al dinosaurio al nodo de patrulla más cercano de su lista (útil al regresar de persecución o huida).
+    /// </summary>
+    public void GoToNearestPatrolNode()
+    {
+        Node nearest = GetNearestPatrolOrGraphNode();
+        if (nearest != null)
+        {
+            MoveTo(nearest.transform.position);
+        }
+        else
+        {
+            GoToNextPatrolNode();
+        }
     }
 
     public void GoToRandomNode()
