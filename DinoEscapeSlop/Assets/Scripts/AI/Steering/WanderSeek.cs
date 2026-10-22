@@ -2,200 +2,103 @@ using UnityEngine;
 
 public class WanderSeek : MonoBehaviour
 {
-            private Vector3 target;
+    private Vector3 target;
+    private bool arrival;
 
-            private bool Arrival = false; //si es true, el enemigo se detiene en el centro del nodo, si es false, el enemigo sigue avanzando hasta el siguiente nodo
-            
-            //follow strength, higher = faster, smaller arc;
-            private float smooothness = 0.5f;
+    [SerializeField] private float smoothness = 0.5f;
+    [SerializeField] private float repel = 0.5f;
+    [SerializeField] private float radius = 10f;
+    [SerializeField] private float maxWanderStrength = 1f;
+    [SerializeField] private float step = 45f;
+    [SerializeField] private float maxspeed = 2.5f;
 
-            private float repel = 0.5f; // fuerza de repulsion, mayor = mas fuerte rango 0-1
+    private Vector3 wander = Vector3.zero;
 
-            private float radius = 10f; // cada cuadricula de unity son 10m
+    void FixedUpdate()
+    {
+        WanderRotation(target);
+        ForceForward(target);
+    }
 
-            private float maxWanderStrength = 1f; //0-1, 1 significa que el angulo de wander es igual al ratio distancia
+    public void setTarget(Vector3 newTarget)
+    {
+        target = newTarget;
+        wander = target - transform.position;
+    }
 
-            private float step = 45f; //numero de grados por el que variará el ángulo en cada frame;
-            private Vector3 counterforce = new Vector3(0,0,0);
-            private Vector3 force = new Vector3(0,0,0);
-            private Vector3 desired = new Vector3(0,0,0);
+    public void setArrival(bool newArrival) => arrival = newArrival;
 
-            private Vector3 wander = new Vector3(0,0,0);
+    private void WanderRotation(Vector3 targetPosition)
+    {
+        if (targetPosition == Vector3.zero) return;
+        Vector3 desired = targetPosition - transform.position;
+        if (desired.sqrMagnitude < 0.001f) return;
 
-            //MAXSPEED rotation interpolation factor
-            private float maxspeed = 2.5F; 
-            
-         // Start is called once before the first execution of Update after the MonoBehaviour is created
-        void Start()
+        if (!arrival)
         {
-        }
+            float distance = Mathf.Sqrt(desired.x * desired.x + desired.z * desired.z);
+            float wanderRatio = (1f - (distance / 100f)) * distance;
+            float wanderRatioAngle = Mathf.Abs(Mathf.Atan(wanderRatio / distance));
+            float maxWanderStrengthAngle = wanderRatioAngle * maxWanderStrength;
 
-        // Update is called once per frame
-        void FixedUpdate()
-        {
-            wanderRotation(target);
-            forceForward(target);
-        }
+            float newstep = (Random.value < 0.5f) ? step : -step;
 
-        public void setTarget(Vector3 newTarget)
-        {
-            target = newTarget;
-            //wander inicial es igual a desired
-            wander = target - this.transform.position;
-        }
+            float newx = Mathf.Cos(newstep) * wander.x - Mathf.Sin(newstep) * wander.z;
+            float newz = Mathf.Sin(newstep) * wander.x + Mathf.Cos(newstep) * wander.z;
+            Vector3 newWander = new Vector3(newx, wander.y, newz);
+            Vector3 desiredWander = new Vector3(
+                desired.x != 0 ? newWander.x / desired.x : 0,
+                desired.y != 0 ? newWander.y / desired.y : 0,
+                desired.z != 0 ? newWander.z / desired.z : 0
+            );
 
-        public void setArrival(bool newArrival)
-        {
-            Arrival = newArrival;
-        }
+            float wAngle = Mathf.Abs(Mathf.Acos(Mathf.Clamp01(Mathf.Sqrt(desiredWander.x * desiredWander.x + desiredWander.z * desiredWander.z))));
 
-        private void wanderRotation(Vector3 targetPosition)
-        {
-            
-            if(targetPosition == null) return;
-            //ROTATION
-            //1.DESIRED
-            desired = targetPosition - this.transform.position;
-
-            if(!Arrival)
+            if (wAngle > maxWanderStrengthAngle)
             {
-                 //calculamos el radio de wander
-                float distance = Mathf.Sqrt(desired.x*desired.x + desired.z*desired.z);
-                if(distance<0) distance = -distance; //asegura que la distancia sea positiva
-                float wanderRatio = (1f-(distance/100f))*distance;
+                float signAngle = newstep > 0 ? maxWanderStrengthAngle : -maxWanderStrengthAngle;
+                newx = Mathf.Cos(signAngle) * desired.x - Mathf.Sin(signAngle) * desired.z;
+                newz = Mathf.Sin(signAngle) * desired.x + Mathf.Cos(signAngle) * desired.z;
+                newWander = new Vector3(newx, wander.y, newz);
+            }
 
-                //calculamos su angulo
-                float wanderRatioAngle = Mathf.Atan(wanderRatio/distance);
-
-                //valor siempre positivo
-                if(wanderRatioAngle<0)
-                {
-                    wanderRatioAngle= -wanderRatioAngle;
-                }
-
-                //calculamos el maximo angulo de desviación siempre positivo
-                float maxWanderStrengthAngle = wanderRatioAngle * maxWanderStrength;
-
-                //decidimos la variación frame a frame
-                float rand = Random.Range(0,1);
-                float newstep;
-                if(rand==0)
-                {
-                    newstep = step;
-                }
-                else
-                {
-                newstep = -step; 
-                }
-                
-                //creamos el nuevo vector wander
-                float newx;
-                newx = Mathf.Cos(newstep)*wander.x -Mathf.Sin(newstep)*wander.z;
-                float newz;
-                newz= Mathf.Sin(newstep)*wander.x +Mathf.Cos(newstep)*wander.z;
-                Vector3 newWander= new Vector3(newx, wander.y, newz);
-                Vector3 desired_wander = new Vector3(newWander.x/desired.x, newWander.y/desired.y, newWander.z/desired.z);
-                
-                //comprobamos no excedir el ángulo máximo
-                float wAngle = Mathf.Acos( Mathf.Sqrt(desired_wander.x*desired_wander.x + desired_wander.z*desired_wander.z));
-                if(wAngle<0)
-                {
-                    wAngle = -wAngle;
-                }
-
-                //lo corregimos de haverlo superado
-                if(wAngle>maxWanderStrengthAngle)
-                {
-                    if(newstep>0)
-                    {
-                         //creamos el nuevo vector wander
-                        newx = Mathf.Cos(maxWanderStrengthAngle)*desired.x -Mathf.Sin(maxWanderStrengthAngle)*desired.z;
-                        newz = Mathf.Sin(maxWanderStrengthAngle)*desired.x +Mathf.Cos(maxWanderStrengthAngle)*desired.z;
-                        newWander= new Vector3(newx, wander.y, newz);
-                    }
-                    else
-                    {
-                        newx = Mathf.Cos(-maxWanderStrengthAngle)*desired.x -Mathf.Sin(-maxWanderStrengthAngle)*desired.z;
-                        newz = Mathf.Sin(-maxWanderStrengthAngle)*desired.x +Mathf.Cos(-maxWanderStrengthAngle)*desired.z;
-                        newWander= new Vector3(newx, wander.y, newz);
-                    }
-                       
-                }
-                //actualizamos wander para continuar variando sobre él
-                wander = newWander;
-
-                //Rotation
+            wander = newWander;
+            if (wander.sqrMagnitude > 0.001f)
+            {
                 Quaternion targetRotation = Quaternion.LookRotation(wander);
-
-                //interpolación
-                this.transform.rotation = Quaternion.Slerp
-                (
-                    this.transform.rotation, // Current rotation
-                    targetRotation,     // Target rotation
-                    Time.deltaTime * maxspeed // Interpolation factor
-                );
-
-            }
-            else
-            {
-                //TURNING
-                // Generate a Quaternion that faces that direction
-                // Passing the up direction (Vector3.up) as the second argument keeps the head from tilting NO HACE FALTA
-                Quaternion targetRotation = Quaternion.LookRotation(desired);
-
-            
-                // 2. Interpolate between the current and target rotations with Slerp
-                // Moving a fixed fraction toward the target each frame produces
-                // a natural turn that eases out near the end
-                this.transform.rotation = Quaternion.Slerp
-                (
-                    this.transform.rotation, // Current rotation
-                    targetRotation,     // Target rotation
-                    Time.deltaTime * maxspeed // Interpolation factor
-                );
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * maxspeed);
             }
         }
-
-        private void forceForward(Vector3 targetPosition)
+        else
         {
-            if(targetPosition == null) return;
-            //FORCE FORWARD
-            force = Vector3.Lerp(this.transform.position, targetPosition, smooothness * Time.deltaTime);
-
-            if(force.z<0) //asegura que la fuerza sea positiva
-            {
-                force = new Vector3(0, 0, -force.z);
-            }
-            else
-            {
-                force = new Vector3(0, 0, force.z);
-            }
-
-
-            if(Arrival)
-            {
-                //ARRIVAL (balance de fuerzas en el centro, contrafuerza progresivamente superior a la fuerza de empuje) 
-                
-
-                //distancia absoluta
-                desired = targetPosition - this.transform.position;
-                float distance = Mathf.Sqrt(desired.x*desired.x + desired.z*desired.z);
-                if(distance<0) distance = -distance; //asegura que la distancia sea positiva
-                
-                if(distance<radius)
-                {
-                    // Rebajar ambas fuerzas progresivamente
-                    Debug.Log("Ratio: " + (1f- distance / radius )); //Range 0-1, 0 = center, 1 = radius
-                    float ratio = distance/radius; //Range 0-1, 0 = center, 1 = radius
-                    //TODO Rebajar ambas fuerzas progresivamente
-                    counterforce = new Vector3(0, 0, force.z* (1f+(1 - ratio))*repel); 
-                    force = new Vector3(0, 0, force.z);
-                    this.GetComponent<ConstantForce>().relativeForce = (force - counterforce)*ratio; 
-
-                }
-                else this.GetComponent<ConstantForce>().relativeForce = force; 
-            }
-            else this.GetComponent<ConstantForce>().relativeForce = force; 
+            Quaternion targetRotation = Quaternion.LookRotation(desired);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * maxspeed);
         }
-}
+    }
 
+    private void ForceForward(Vector3 targetPosition)
+    {
+        if (targetPosition == Vector3.zero) return;
+        ConstantForce cf = GetComponent<ConstantForce>();
+        if (cf == null) return;
+
+        Vector3 force = Vector3.Lerp(transform.position, targetPosition, smoothness * Time.deltaTime);
+        force = new Vector3(0, 0, Mathf.Abs(force.z));
+
+        if (arrival)
+        {
+            Vector3 desired = targetPosition - transform.position;
+            float distance = Mathf.Sqrt(desired.x * desired.x + desired.z * desired.z);
+
+            if (distance < radius)
+            {
+                float ratio = distance / radius;
+                Vector3 counterforce = new Vector3(0, 0, force.z * (1f + (1f - ratio)) * repel);
+                cf.relativeForce = (force - counterforce) * ratio;
+                return;
+            }
+        }
+
+        cf.relativeForce = force;
+    }
+}

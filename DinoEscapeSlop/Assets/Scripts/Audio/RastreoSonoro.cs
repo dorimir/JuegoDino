@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class RastreoSonoro : MonoBehaviour
 {
@@ -8,13 +8,9 @@ public class RastreoSonoro : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
-        if (other.CompareTag("Player"))
+        if (other.CompareTag("Player") && sonido != null)
         {
-            Debug.Log("El jugador ha entrado en la zona");
-            if (sonido != null)
-            {
-                sonido.Play();
-            }
+            sonido.Play();
         }
     }
 }

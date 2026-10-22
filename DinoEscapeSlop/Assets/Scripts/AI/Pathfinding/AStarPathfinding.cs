@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public class AStarPathfinding : MonoBehaviour
@@ -15,11 +15,6 @@ public class AStarPathfinding : MonoBehaviour
         cachedNodes = Object.FindObjectsByType<Node>(FindObjectsSortMode.None);
     }
 
-    /// <summary>
-    /// Calcula la ruta A* entre dos posiciones del mundo y devuelve una lista de posiciones Vector3.
-    /// Utiliza estructuras locales para permitir que multiples enemigos calculen rutas concurrentemente
-    /// sin alterar los componentes Node de la escena.
-    /// </summary>
     public List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos)
     {
         Node startNode = GetClosestNode(startPos);
@@ -27,7 +22,6 @@ public class AStarPathfinding : MonoBehaviour
 
         if (startNode == null || targetNode == null) return null;
 
-        // Si el enemigo y el objetivo estan en el mismo nodo mas cercano
         if (startNode == targetNode)
         {
             List<Vector3> directPath = new List<Vector3>();
@@ -36,31 +30,18 @@ public class AStarPathfinding : MonoBehaviour
             float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) + 
                                (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
 
-            if (dStartSqr > 0.36f)
-            {
-                directPath.Add(targetNode.transform.position);
-            }
-            if (dTargetSqr > 0.36f)
-            {
-                directPath.Add(targetPos);
-            }
-            if (directPath.Count == 0)
-            {
-                directPath.Add(targetPos);
-            }
+            if (dStartSqr > 0.36f) directPath.Add(targetNode.transform.position);
+            if (dTargetSqr > 0.36f) directPath.Add(targetPos);
+            if (directPath.Count == 0) directPath.Add(targetPos);
             return directPath;
         }
 
-        List<Node> openSet = new List<Node>();
+        List<Node> openSet = new List<Node> { startNode };
         HashSet<Node> closedSet = new HashSet<Node>();
 
-        Dictionary<Node, int> gCosts = new Dictionary<Node, int>();
-        Dictionary<Node, int> hCosts = new Dictionary<Node, int>();
+        Dictionary<Node, int> gCosts = new Dictionary<Node, int> { [startNode] = 0 };
+        Dictionary<Node, int> hCosts = new Dictionary<Node, int> { [startNode] = GetDistance(startNode, targetNode) };
         Dictionary<Node, Node> parentMap = new Dictionary<Node, Node>();
-
-        openSet.Add(startNode);
-        gCosts[startNode] = 0;
-        hCosts[startNode] = GetDistance(startNode, targetNode);
 
         while (openSet.Count > 0)
         {
@@ -114,7 +95,7 @@ public class AStarPathfinding : MonoBehaviour
             }
         }
 
-        return null; // Si no hay camino posible
+        return null;
     }
 
     private List<Vector3> RetracePath(Node startNode, Node endNode, Dictionary<Node, Node> parentMap)
@@ -128,14 +109,11 @@ public class AStarPathfinding : MonoBehaviour
             visited.Add(currentNode);
             path.Add(currentNode.transform.position);
 
-            if (currentNode == startNode)
-            {
-                break;
-            }
+            if (currentNode == startNode) break;
 
-            if (parentMap.ContainsKey(currentNode))
+            if (parentMap.TryGetValue(currentNode, out Node nextNode))
             {
-                currentNode = parentMap[currentNode];
+                currentNode = nextNode;
             }
             else
             {
@@ -163,10 +141,6 @@ public class AStarPathfinding : MonoBehaviour
         return cachedNodes;
     }
 
-    /// <summary>
-    /// Comprueba si existe una trayectoria despejada entre dos posiciones en el plano horizontal (sin muros ni obstaculos que bloqueen el paso).
-    /// Realiza comprobaciones a la altura del cuerpo (y = 0.75m) usando Linecast y SphereCast con margen para el collider del dinosaurio.
-    /// </summary>
     public static bool HasClearLine(Vector3 fromPos, Vector3 toPos, float clearanceRadius = 0.35f)
     {
         float testHeight = 0.75f;
@@ -177,10 +151,8 @@ public class AStarPathfinding : MonoBehaviour
 
         if (dist <= 0.4f) return true;
 
-        // Excluir capa 3 (Dinosaurios) y capa 2 (Ignore Raycast)
         int wallLayerMask = ~((1 << 3) | (1 << 2));
 
-        // 1. Linecast directo: detecta muros finos o esquinas intermedias
         if (Physics.Linecast(origin, target, out RaycastHit lineHit, wallLayerMask, QueryTriggerInteraction.Ignore))
         {
             if (lineHit.collider != null && !lineHit.collider.CompareTag("Enemy") && lineHit.normal.y < 0.7f)
@@ -189,7 +161,6 @@ public class AStarPathfinding : MonoBehaviour
             }
         }
 
-        // 2. SphereCast con margen lateral para comprobar el paso físico del cuerpo del dinosaurio
         if (dist > clearanceRadius * 2f)
         {
             Vector3 fwdOrigin = origin + dir.normalized * 0.15f;
@@ -198,10 +169,7 @@ public class AStarPathfinding : MonoBehaviour
             RaycastHit[] hits = Physics.SphereCastAll(fwdOrigin, clearanceRadius, dir.normalized, castDist, wallLayerMask, QueryTriggerInteraction.Ignore);
             foreach (var hit in hits)
             {
-                if (hit.collider == null) continue;
-                if (hit.collider.CompareTag("Enemy")) continue;
-                if (hit.normal.y >= 0.7f) continue; // Suelo o rampa
-
+                if (hit.collider == null || hit.collider.CompareTag("Enemy") || hit.normal.y >= 0.7f) continue;
                 return false;
             }
         }
@@ -209,9 +177,6 @@ public class AStarPathfinding : MonoBehaviour
         return true;
     }
 
-    /// <summary>
-    /// Devuelve todos los nodos del grafo que son directamente accesibles mediante Raycast desde la posicion indicada.
-    /// </summary>
     public List<Node> GetReachableNodes(Vector3 worldPos)
     {
         List<Node> reachable = new List<Node>();
@@ -233,11 +198,6 @@ public class AStarPathfinding : MonoBehaviour
         return reachable;
     }
 
-    /// <summary>
-    /// Encuentra el nodo del grafo mas cercano a una posicion del mundo (en el plano horizontal XZ).
-    /// Prioriza mediante Raycast los nodos transitables y visibles sin muros de por medio,
-    /// recurriendo al mas cercano euclideo si no hay ninguno directamente visible.
-    /// </summary>
     public Node GetClosestNode(Vector3 worldPos)
     {
         if (cachedNodes == null || cachedNodes.Length == 0)
@@ -245,14 +205,10 @@ public class AStarPathfinding : MonoBehaviour
             CacheNodes();
         }
 
-        if (cachedNodes == null || cachedNodes.Length == 0)
-        {
-            return null;
-        }
+        if (cachedNodes == null || cachedNodes.Length == 0) return null;
 
         Node closestReachable = null;
         float minReachableDistSqr = Mathf.Infinity;
-
         Node closestFallback = null;
         float minFallbackDistSqr = Mathf.Infinity;
 
@@ -270,23 +226,16 @@ public class AStarPathfinding : MonoBehaviour
                 closestFallback = node;
             }
 
-            if (HasClearLine(worldPos, node.transform.position))
+            if (HasClearLine(worldPos, node.transform.position) && distSqr < minReachableDistSqr)
             {
-                if (distSqr < minReachableDistSqr)
-                {
-                    minReachableDistSqr = distSqr;
-                    closestReachable = node;
-                }
+                minReachableDistSqr = distSqr;
+                closestReachable = node;
             }
         }
 
         return closestReachable != null ? closestReachable : closestFallback;
     }
 
-    /// <summary>
-    /// Encuentra el nodo del grafo más alejado de un nodo de referencia.
-    /// Utilizado por el modo huida para alejarse lo máximo posible del nodo más cercano al peligro.
-    /// </summary>
     public Node GetFarthestNodeFrom(Node referenceNode)
     {
         if (referenceNode == null) return null;
@@ -295,8 +244,8 @@ public class AStarPathfinding : MonoBehaviour
 
         Node farthestNode = null;
         float maxDistSqr = -1f;
-
         Vector3 refPos = referenceNode.transform.position;
+
         foreach (Node node in allNodes)
         {
             if (node == null || node == referenceNode) continue;
@@ -314,13 +263,9 @@ public class AStarPathfinding : MonoBehaviour
         return farthestNode;
     }
 
-    /// <summary>
-    /// Sabiendo cual es el nodo más cercano a una posición (amenaza), devuelve el nodo más alejado posible de él.
-    /// </summary>
     public Node GetFarthestNodeFromPosition(Vector3 threatPos)
     {
         Node closestToThreat = GetClosestNode(threatPos);
-        if (closestToThreat == null) return null;
-        return GetFarthestNodeFrom(closestToThreat);
+        return closestToThreat != null ? GetFarthestNodeFrom(closestToThreat) : null;
     }
 }

@@ -1,26 +1,22 @@
-using System.Collections.Generic;
+ï»¿using System.Collections.Generic;
 using UnityEngine;
 
 public class SeparationSteering : MonoBehaviour
 {
-    [Header("Parámetros de Steering")]
+    [Header("Parametros de Steering")]
     public float maxSpeed = 5f;
     public float maxForce = 10f;
 
-    [Header("Separación")]
+    [Header("Separacion")]
     public float separationRadius = 2.5f;
     public float separationWeight = 3f;
 
     private Vector3 velocity;
 
-    /// <summary>
-    /// Mueve al enemigo hacia una posición objetivo (nodo A*) aplicando la fuerza de separación continua.
-    /// </summary>
     public void SteerTowardsWithSeparation(Vector3 targetPosition, List<Transform> nearbyAllies)
     {
-        // 1. FUERZA DE NAVEGACIÓN (Seek hacia el objetivo/nodo)
-        Vector3 desiredVelocity = (targetPosition - transform.position);
-        desiredVelocity.y = 0; // Mantener movimiento en plano horizontal
+        Vector3 desiredVelocity = targetPosition - transform.position;
+        desiredVelocity.y = 0;
 
         if (desiredVelocity.sqrMagnitude > 0.01f)
         {
@@ -28,21 +24,14 @@ public class SeparationSteering : MonoBehaviour
         }
 
         Vector3 seekForce = desiredVelocity - velocity;
-
-        // 2. FUERZA DE SEPARACIÓN (Repulsión respecto a aliados)
         Vector3 separationForce = ComputeSeparationForce(nearbyAllies);
+        Vector3 totalSteering = Vector3.ClampMagnitude(seekForce + (separationForce * separationWeight), maxForce);
 
-        // 3. SUMA Y APLICACIÓN DE FUERZAS
-        Vector3 totalSteering = seekForce + (separationForce * separationWeight);
-        totalSteering = Vector3.ClampMagnitude(totalSteering, maxForce);
-
-        // Actualizar velocidad y posición
         velocity = Vector3.ClampMagnitude(velocity + totalSteering * Time.deltaTime, maxSpeed);
         velocity.y = 0;
 
         transform.position += velocity * Time.deltaTime;
 
-        // Rotación suave hacia la dirección de movimiento real
         if (velocity.sqrMagnitude > 0.01f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(velocity);
@@ -65,7 +54,6 @@ public class SeparationSteering : MonoBehaviour
             pushAway.y = 0;
             float distance = pushAway.magnitude;
 
-            // Si está dentro del radio de separación, aplicar fuerza inversamente proporcional a la distancia
             if (distance > 0.001f && distance < separationRadius)
             {
                 force += (pushAway.normalized / distance);
@@ -87,7 +75,6 @@ public class SeparationSteering : MonoBehaviour
 
     private void OnDrawGizmosSelected()
     {
-        // Visualizar el radio de separación en el editor
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, separationRadius);
     }
