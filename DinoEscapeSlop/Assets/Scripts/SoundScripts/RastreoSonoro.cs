@@ -25,6 +25,10 @@ public class RastreoSonoro : MonoBehaviour
     {
         rbObjeto = GetComponent<Rigidbody>();
 
+        // Hacer invisible el área visual de sonido si tiene MeshRenderer
+        MeshRenderer mr = GetComponent<MeshRenderer>();
+        if (mr != null) mr.enabled = false;
+
         if (sonido != null)
         {
             sonido.loop = true;

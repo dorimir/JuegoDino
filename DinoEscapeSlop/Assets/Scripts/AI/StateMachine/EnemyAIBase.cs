@@ -82,7 +82,7 @@ public class EnemyAI : MonoBehaviour
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
 
-    public enum DinoVisualState { Normal, Chasing, Fleeing }
+    public enum DinoVisualState { Normal, Chasing, Fleeing, Alert }
 
     protected virtual void OnEnable()
     {
@@ -130,9 +130,11 @@ public class EnemyAI : MonoBehaviour
     {
         if (this is PreyEnemyAI) { IsPrey = true; return; }
         if (this is PredatorEnemyAI) { IsPrey = false; return; }
+        if (this is BlindEnemyAI) { IsPrey = false; return; }
 
         string goName = gameObject.name.ToLower();
         if (goName.Contains("presa")) { IsPrey = true; return; }
+        if (goName.Contains("ciego") || goName.Contains("blind")) { IsPrey = false; return; }
         if (goName.Contains("lider") && !goName.Contains("presa")) { IsPrey = false; return; }
         if (goName.Contains("sumiso") || goName.Contains("depredador") || goName.Contains("predator")) { IsPrey = false; return; }
 
@@ -288,6 +290,11 @@ public class EnemyAI : MonoBehaviour
             targetColor = new Color(0.15f, 0.55f, 1f, 1f);
             targetEmission = new Color(0.05f, 0.45f, 1f, 1f);
         }
+        else if (state == DinoVisualState.Alert)
+        {
+            targetColor = new Color(0.6f, 0.1f, 0.9f, 1f);
+            targetEmission = new Color(0.5f, 0.05f, 0.8f, 1f);
+        }
 
         foreach (var rend in dinoRenderers)
         {
@@ -315,6 +322,8 @@ public class EnemyAI : MonoBehaviour
     public void SetChasingVisuals(bool isChasing) => SetVisualState(isChasing ? DinoVisualState.Chasing : DinoVisualState.Normal);
 
     public void SetFleeingVisuals(bool isFleeing) => SetVisualState(isFleeing ? DinoVisualState.Fleeing : DinoVisualState.Normal);
+
+    public void SetAlertVisuals(bool isAlert) => SetVisualState(isAlert ? DinoVisualState.Alert : DinoVisualState.Normal);
 
     public bool MutuallySees(EnemyAI other)
     {
@@ -507,7 +516,7 @@ public class EnemyAI : MonoBehaviour
 
     public void NotifyPackPatrol() => TriggerPatrol();
 
-    public bool CanSeeSpecificDino(EnemyAI targetDino)
+    public virtual bool CanSeeSpecificDino(EnemyAI targetDino)
     {
         if (targetDino == null || !targetDino.gameObject.activeInHierarchy) return false;
 
@@ -556,7 +565,7 @@ public class EnemyAI : MonoBehaviour
         return true;
     }
 
-    public bool CanSeeBigDino(out EnemyAI spottedPredator)
+    public virtual bool CanSeeBigDino(out EnemyAI spottedPredator)
     {
         spottedPredator = null;
         if (IsBigDino) return false;
@@ -576,7 +585,7 @@ public class EnemyAI : MonoBehaviour
         return false;
     }
 
-    public bool CanSeePrey(out EnemyAI spottedPrey)
+    public virtual bool CanSeePrey(out EnemyAI spottedPrey)
     {
         spottedPrey = null;
         if (IsSmallDino) return false;
@@ -678,7 +687,7 @@ public class EnemyAI : MonoBehaviour
         return false;
     }
 
-    public bool CanSeePlayer()
+    public virtual bool CanSeePlayer()
     {
         if (Player == null)
         {

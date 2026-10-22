@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public class PickUpScript : MonoBehaviour
 {
@@ -23,6 +23,10 @@ public class PickUpScript : MonoBehaviour
 
     private GameObject heldObj;
     private Rigidbody heldObjRb;
+
+    public GameObject HeldObj => heldObj;
+    public bool IsHoldingObject => heldObj != null;
+    public bool IsHoldingSoundObject => heldObj != null && (heldObj.GetComponentInChildren<RastreoSonoro>() != null || heldObj.CompareTag("canPickUp"));
 
     private Transform[] heldTransforms;
     private int[] originalLayers;

@@ -13,17 +13,18 @@ public class WinManager : MonoBehaviour
     [SerializeField] private int keysNeeded = 10;
 
     [Header("Meta")]
-    [Tooltip("Si lo dejas vacío, busca el objeto con tag 'Finish'")]
+    [Tooltip("Posición exacta de la puerta de salida")]
+    [SerializeField] private Vector3 doorPosition = new Vector3(10.670000076293946f, 0.027003999799489976f, 77.9800033569336f);
     [SerializeField] private GameObject finishObject;
-    [SerializeField] private float finishRadius = 2f;
+    [SerializeField] private float finishRadius = 3.0f;
 
     [Header("Llaves")]
-    [SerializeField] private float pickupRadius = 1.5f;
+    [SerializeField] private float pickupRadius = 2.0f;
 
     [Header("UI")]
     [SerializeField] private TMP_Text keysText;
     [SerializeField] private TMP_Text plusOneText;
-    [SerializeField] private string exitMessage = "Busca la salida";
+    [SerializeField] private string exitMessage = "¡Salida Desbloqueada! Cruza la puerta con el objeto sonoro";
 
     [Header("Efecto +1")]
     [SerializeField] private float popupDuration = 1f;
@@ -33,6 +34,7 @@ public class WinManager : MonoBehaviour
     private bool allKeysCollected = false;
     private bool won = false;
     private GameObject player;
+    private GameObject soundObject;
     private Collider finishCollider;
     private readonly List<GameObject> keys = new List<GameObject>();
     private Coroutine popupRoutine;
@@ -46,18 +48,41 @@ public class WinManager : MonoBehaviour
     private void Start()
     {
         player = GameObject.FindGameObjectWithTag("Player");
+        keys.Clear();
         keys.AddRange(GameObject.FindGameObjectsWithTag("Key"));
+
+        // Garantizar que cada llave tenga el script de animación y recogida KeyPickup
+        for (int i = 0; i < keys.Count; i++)
+        {
+            if (keys[i] != null && keys[i].GetComponent<KeyPickup>() == null)
+            {
+                keys[i].AddComponent<KeyPickup>();
+            }
+        }
+
+        // Localizar el objeto sonoro en la escena
+        FindSoundObject();
 
         if (finishObject == null)
             finishObject = GameObject.FindGameObjectWithTag("Finish");
+
+        if (finishObject == null)
+        {
+            GameObject doorGo = GameObject.Find("ExitDoor") ?? GameObject.Find("Door");
+            if (doorGo != null) finishObject = doorGo;
+        }
 
         if (finishObject != null)
             finishCollider = finishObject.GetComponent<Collider>();
 
         if (player == null)
             Debug.LogWarning("WinManager: no se encontró ningún objeto con tag 'Player'.");
-        if (finishObject == null)
-            Debug.LogWarning("WinManager: no hay meta. Asigna 'Finish Object' o ponle tag 'Finish'.");
+
+        if (keysText == null)
+        {
+            GameObject kc = GameObject.Find("KeyCounter");
+            if (kc != null) keysText = kc.GetComponent<TMP_Text>();
+        }
 
         if (plusOneText != null)
         {
@@ -69,13 +94,26 @@ public class WinManager : MonoBehaviour
         UpdateKeysUI();
     }
 
+    private void FindSoundObject()
+    {
+        soundObject = GameObject.Find("Object+TriggerSonoro");
+        if (soundObject == null)
+        {
+            RastreoSonoro rs = Object.FindAnyObjectByType<RastreoSonoro>();
+            if (rs != null)
+            {
+                soundObject = rs.GetComponentInParent<Rigidbody>()?.gameObject ?? rs.gameObject;
+            }
+        }
+    }
+
     private void Update()
     {
         if (won || player == null) return;
 
         Vector3 playerPos = player.transform.position;
 
-        // Recoger llaves por distancia (solo hasta tener todas)
+        // Recoger llaves por distancia 2D (solo hasta tener todas)
         if (!allKeysCollected)
         {
             float sqrRadius = pickupRadius * pickupRadius;
@@ -88,10 +126,13 @@ public class WinManager : MonoBehaviour
                 }
 
                 Vector3 diff = keys[i].transform.position - playerPos;
-                if (diff.sqrMagnitude <= sqrRadius)
+                Vector2 diff2D = new Vector2(diff.x, diff.z);
+
+                if (diff2D.sqrMagnitude <= sqrRadius && Mathf.Abs(diff.y) < 2.5f)
                 {
-                    Destroy(keys[i]);
+                    GameObject keyObj = keys[i];
                     keys.RemoveAt(i);
+                    Destroy(keyObj);
                     AddKey();
 
                     if (allKeysCollected) break;
@@ -99,21 +140,45 @@ public class WinManager : MonoBehaviour
             }
         }
 
-        // Comprobar meta
-        if (allKeysCollected && finishObject != null && IsPlayerAtFinish(playerPos))
+        // Comprobar si el jugador alcanza la puerta con las 10 llaves Y el objeto sonoro
+        Vector3 exitPos = finishObject != null ? finishObject.transform.position : doorPosition;
+        bool isAtDoor = IsPlayerAtFinish(playerPos, exitPos);
+        bool hasSound = HasSoundObject(playerPos, exitPos);
+
+        if (allKeysCollected && hasSound && isAtDoor)
         {
             won = true;
             SceneManager.LoadScene(winSceneName);
         }
     }
 
-    private bool IsPlayerAtFinish(Vector3 playerPos)
+    private bool HasSoundObject(Vector3 playerPos, Vector3 exitPos)
+    {
+        if (soundObject == null) FindSoundObject();
+
+        // 1. Verificar si el jugador lo lleva en las manos (PickUpScript)
+        PickUpScript pickup = player.GetComponent<PickUpScript>() ?? player.GetComponentInChildren<PickUpScript>();
+        if (pickup != null && pickup.IsHoldingSoundObject) return true;
+
+        // 2. Verificar si el objeto sonoro está junto al jugador o en la puerta
+        if (soundObject != null)
+        {
+            float distToPlayer = Vector3.Distance(soundObject.transform.position, playerPos);
+            float distToDoor = Vector3.Distance(soundObject.transform.position, exitPos);
+            if (distToPlayer <= 4.0f || distToDoor <= 5.0f) return true;
+        }
+
+        return false;
+    }
+
+    private bool IsPlayerAtFinish(Vector3 playerPos, Vector3 exitPos)
     {
         Vector3 closest = finishCollider != null
             ? finishCollider.ClosestPoint(playerPos)
-            : finishObject.transform.position;
+            : exitPos;
 
-        return (closest - playerPos).sqrMagnitude <= finishRadius * finishRadius;
+        Vector2 diff2D = new Vector2(closest.x - playerPos.x, closest.z - playerPos.z);
+        return diff2D.sqrMagnitude <= finishRadius * finishRadius && Mathf.Abs(closest.y - playerPos.y) < 3.5f;
     }
 
     public void AddKey()
@@ -136,11 +201,55 @@ public class WinManager : MonoBehaviour
 
     private void UpdateKeysUI()
     {
-        if (keysText == null) return;
+        if (keysText == null)
+        {
+            GameObject kc = GameObject.Find("KeyCounter");
+            if (kc != null) keysText = kc.GetComponent<TMP_Text>();
+        }
 
-        keysText.text = allKeysCollected
-            ? exitMessage
-            : $"Llaves: {keysCollected}/{keysNeeded}";
+        if (keysText != null)
+        {
+            if (!allKeysCollected)
+            {
+                keysText.text = $"Llaves: {keysCollected} / {keysNeeded}";
+            }
+            else
+            {
+                keysText.text = exitMessage;
+            }
+        }
+    }
+
+    private void OnGUI()
+    {
+        if (won || EnemyAI.GlobalPlayerDead) return;
+
+        Vector3 exitPos = finishObject != null ? finishObject.transform.position : doorPosition;
+        Vector3 playerPos = (player != null) ? player.transform.position : Vector3.zero;
+        bool hasSound = (player != null) && HasSoundObject(playerPos, exitPos);
+        bool isAtDoor = (player != null) && IsPlayerAtFinish(playerPos, exitPos);
+
+        GUIStyle boxStyle = new GUIStyle(GUI.skin.box);
+        boxStyle.fontSize = 16;
+        boxStyle.fontStyle = FontStyle.Bold;
+        boxStyle.alignment = TextAnchor.MiddleCenter;
+
+        if (!allKeysCollected)
+        {
+            boxStyle.normal.textColor = new Color(1f, 0.88f, 0.2f);
+            string extra = isAtDoor ? "\n(¡Faltan llaves para abrir la puerta!)" : "";
+            GUI.Box(new Rect(Screen.width - 250, 20, 230, isAtDoor ? 54 : 42), $"🔑 Llaves: {keysCollected} / {keysNeeded}{extra}", boxStyle);
+        }
+        else if (!hasSound)
+        {
+            boxStyle.normal.textColor = new Color(1f, 0.5f, 0.1f);
+            GUI.Box(new Rect(Screen.width - 320, 20, 300, 52), "📦 ¡10 Llaves conseguidas!\n¡Trae el objeto sonoro a la puerta!", boxStyle);
+        }
+        else
+        {
+            boxStyle.normal.textColor = new Color(0.2f, 1f, 0.3f);
+            GUI.Box(new Rect(Screen.width - 300, 20, 280, 52), "🚪 ¡Todo listo (Llaves + Objeto)!\nCruza la puerta para escapar", boxStyle);
+        }
     }
 
     private IEnumerator PlusOneRoutine()

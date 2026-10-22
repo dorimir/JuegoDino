@@ -1,16 +1,19 @@
 using UnityEngine;
 
-public class RastreoSonoro : MonoBehaviour
+namespace Audio
 {
-    public Collider Area;
-    public GameObject Player;
-    public AudioSource sonido;
-
-    private void OnTriggerEnter(Collider other)
+    public class RastreoSonoro : MonoBehaviour
     {
-        if (other.CompareTag("Player") && sonido != null)
+        public Collider Area;
+        public GameObject Player;
+        public AudioSource sonido;
+
+        private void OnTriggerEnter(Collider other)
         {
-            sonido.Play();
+            if (other.CompareTag("Player") && sonido != null)
+            {
+                sonido.Play();
+            }
         }
     }
 }
