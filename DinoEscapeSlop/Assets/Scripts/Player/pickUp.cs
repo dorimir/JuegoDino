@@ -10,20 +10,15 @@ public class PickUpScript : MonoBehaviour
     public float throwForce = 15f;
 
     [Header("Suavizado de posición")]
-    [Tooltip("Más alto = más lento y flotante.")]
     public float positionSmoothTime = 0.12f;
-    [Tooltip("Velocidad máxima con la que puede seguir a la cámara.")]
     public float maxFollowSpeed = 15f;
-    [Tooltip("Distancia máxima que puede quedarse por detrás de holdPos (evita que 'vuele' al girar rápido).")]
     public float maxLag = 0.4f;
 
     [Header("Rotación")]
-    [Tooltip("Más alto = sigue antes a la cámara.")]
     public float rotationSmoothness = 8f;
     public float rotationSensitivity = 3f;
 
     [Header("Soltar")]
-    [Tooltip("Separación de la pared/suelo al soltar dentro de la geometría.")]
     public float safeDropMargin = 0.3f;
 
     private GameObject heldObj;
@@ -36,7 +31,7 @@ public class PickUpScript : MonoBehaviour
 
     private int holdLayer;
     private Vector3 moveVelocity;
-    private Quaternion localRotation; // rotación del objeto relativa a holdPos
+    private Quaternion localRotation;
 
     void Start()
     {
@@ -56,7 +51,6 @@ public class PickUpScript : MonoBehaviour
         if (heldObj == null)
             return;
 
-        // Rotar con R + ratón (en el espacio de la cámara)
         if (Input.GetKey(KeyCode.R))
         {
             float x = Input.GetAxis("Mouse X") * rotationSensitivity;
@@ -72,7 +66,6 @@ public class PickUpScript : MonoBehaviour
             Throw();
     }
 
-    // LateUpdate: se ejecuta DESPUÉS de que la cámara ya haya girado en Update
     void LateUpdate()
     {
         if (heldObj == null)
@@ -80,7 +73,6 @@ public class PickUpScript : MonoBehaviour
 
         Transform t = heldObj.transform;
 
-        // Posición suave con velocidad limitada
         Vector3 pos = Vector3.SmoothDamp(
             t.position,
             holdPos.position,
@@ -89,14 +81,12 @@ public class PickUpScript : MonoBehaviour
             maxFollowSpeed
         );
 
-        // Nunca se queda más lejos de holdPos que maxLag
         Vector3 offset = pos - holdPos.position;
         if (offset.magnitude > maxLag)
             pos = holdPos.position + offset.normalized * maxLag;
 
         t.position = pos;
 
-        // Rotación suave (independiente del framerate)
         Quaternion targetRot = holdPos.rotation * localRotation;
         float k = 1f - Mathf.Exp(-rotationSmoothness * Time.deltaTime);
         t.rotation = Quaternion.Slerp(t.rotation, targetRot, k);
@@ -117,27 +107,41 @@ public class PickUpScript : MonoBehaviour
     {
         Rigidbody rb = obj.GetComponent<Rigidbody>();
         if (rb == null)
+        {
+            Debug.LogError("[PICKUP] " + obj.name + " no tiene Rigidbody");
             return;
+        }
 
         heldObj = obj;
         heldObjRb = rb;
 
-        // Guardamos estado original
+        RastreoSonoro rs = obj.GetComponentInChildren<RastreoSonoro>();
+        if (rs == null) rs = obj.GetComponentInParent<RastreoSonoro>();
+
+        if (rs != null)
+        {
+            rs.Recoger();
+            Debug.Log("[PICKUP] Recoger() llamado en " + rs.name);
+        }
+        else
+        {
+            Debug.LogError("[PICKUP] " + obj.name + " NO tiene RastreoSonoro");
+        }
+
         originalKinematic = rb.isKinematic;
         originalDetectCollisions = rb.detectCollisions;
 
         heldTransforms = obj.GetComponentsInChildren<Transform>();
         originalLayers = new int[heldTransforms.Length];
+
         for (int i = 0; i < heldTransforms.Length; i++)
             originalLayers[i] = heldTransforms[i].gameObject.layer;
 
-        // Sin física mientras lo llevas: no empuja nada ni atraviesa nada "de verdad"
-        rb.linearVelocity = Vector3.zero;           // Unity 6: linearVelocity
+        rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
         rb.isKinematic = true;
         rb.detectCollisions = false;
 
-        // Capa que solo ve la cámara Overlay
         if (holdLayer >= 0)
             foreach (Transform tr in heldTransforms)
                 tr.gameObject.layer = holdLayer;
@@ -146,22 +150,30 @@ public class PickUpScript : MonoBehaviour
         moveVelocity = Vector3.zero;
     }
 
-    void Release()
+    void Release(bool lanzado = false)
     {
         if (heldObj == null)
             return;
 
-        // Como se ve por encima de todo, puede estar "dentro" de una pared o del suelo.
-        // Lo colocamos en un punto seguro antes de devolverle la física.
         PlaceSafely();
 
-        // Restaurar capas
         for (int i = 0; i < heldTransforms.Length; i++)
             if (heldTransforms[i] != null)
                 heldTransforms[i].gameObject.layer = originalLayers[i];
 
         heldObjRb.isKinematic = originalKinematic;
         heldObjRb.detectCollisions = originalDetectCollisions;
+
+        RastreoSonoro rs = heldObj.GetComponentInChildren<RastreoSonoro>();
+        if (rs == null) rs = heldObj.GetComponentInParent<RastreoSonoro>();
+
+        if (rs != null)
+        {
+            if (lanzado) rs.Lanzar();
+            else rs.Soltar();
+
+            Debug.Log("[PICKUP] " + (lanzado ? "Lanzar()" : "Soltar()") + " llamado en " + rs.name);
+        }
 
         heldObj = null;
         heldObjRb = null;
@@ -172,7 +184,7 @@ public class PickUpScript : MonoBehaviour
     void Throw()
     {
         Rigidbody rb = heldObjRb;
-        Release();
+        Release(true);
 
         if (rb != null)
             rb.AddForce(transform.forward * throwForce, ForceMode.VelocityChange);

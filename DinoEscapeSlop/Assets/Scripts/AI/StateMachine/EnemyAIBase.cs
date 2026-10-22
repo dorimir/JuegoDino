@@ -21,6 +21,10 @@ public class EnemyAI : MonoBehaviour
     [Tooltip("Lista de seguidores de la manada (solo relevante si es líder)")]
     public List<EnemyAI> packFollowers = new List<EnemyAI>();
 
+
+    [Header("Dinosaurio ciego")]
+    public bool dinoCiego = false;
+
     public EnemyAI LeaderAI { get; private set; }
 
     /// <summary>
@@ -302,7 +306,6 @@ public class EnemyAI : MonoBehaviour
         leaderTransform = null;
         LeaderAI = null;
         packFollowers.Clear();
-
         if (IsSmallDino)
         {
             // Pequeños: agentes autónomos independientes, sin líder predestinado
@@ -325,6 +328,13 @@ public class EnemyAI : MonoBehaviour
             patrolSpeed = 2.4f;
             chaseSpeed = 7.5f;
             fleeSpeed = 8.0f;
+        }
+        if (dinoCiego) //VALORES PARA DINO CIEGO
+        {
+            visionRange = 2.5f;
+            visionAngle = 359f;
+            DetectionRange = 2f;
+            LoseRange = 3f;
         }
 
         StateMachine = new StateMachine();
@@ -960,6 +970,8 @@ public class EnemyAI : MonoBehaviour
     {
         targetPos = Vector3.zero;
 
+        if (dinoCiego)
+            return false;
         // Comprobación individual directa
         if (CanSeePlayer())
         {
