@@ -222,6 +222,8 @@ public class WinManager : MonoBehaviour
 
     private void OnGUI()
     {
+        // Si ya hay un elemento UI de Canvas (TMP_Text) activo en pantalla, evitar dibujar HUD redundante
+        if (keysText != null && keysText.gameObject.activeInHierarchy) return;
         if (won || EnemyAI.GlobalPlayerDead) return;
 
         Vector3 exitPos = finishObject != null ? finishObject.transform.position : doorPosition;

@@ -6200,6 +6200,7 @@ GameObject:
   - component: {fileID: 539341012}
   - component: {fileID: 539341011}
   - component: {fileID: 539341016}
+  - component: {fileID: 539341017}
   m_Layer: 0
   m_Name: Linterna
   m_TagString: canPickUp
@@ -6223,13 +6224,13 @@ MonoBehaviour:
   anguloCono: 60
   origen: {fileID: 539341015}
   inclinacionEnMano: {x: 0, y: 0, z: 0}
-  teclaToggle: 102
+  teclaToggle: 323
   encendida: 0
-  soloSiRecogida: 0
+  soloSiRecogida: 1
   luz: {fileID: 2019814249}
   intensidad: 600
---- !u!136 &539341012
-CapsuleCollider:
+--- !u!65 &539341012
+BoxCollider:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -6246,11 +6247,9 @@ CapsuleCollider:
   m_IsTrigger: 0
   m_ProvidesContacts: 0
   m_Enabled: 1
-  serializedVersion: 2
-  m_Radius: 0.5000001
-  m_Height: 2
-  m_Direction: 1
-  m_Center: {x: 0.000000059604645, y: 0, z: -0.00000008940697}
+  serializedVersion: 3
+  m_Size: {x: 1, y: 1, z: 1}
+  m_Center: {x: 0, y: 0, z: 0}
 --- !u!23 &539341013
 MeshRenderer:
   m_ObjectHideFlags: 0
@@ -6307,7 +6306,7 @@ MeshFilter:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 539341010}
-  m_Mesh: {fileID: 10206, guid: 0000000000000000e000000000000000, type: 0}
+  m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
 --- !u!4 &539341015
 Transform:
   m_ObjectHideFlags: 0
@@ -6316,15 +6315,15 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 539341010}
   serializedVersion: 2
-  m_LocalRotation: {x: 0.5, y: 0.5, z: -0.5, w: 0.5}
-  m_LocalPosition: {x: 29.49, y: 2.11, z: 49.65}
-  m_LocalScale: {x: 0.4, y: 0.4, z: 0.4}
-  m_ConstrainProportionsScale: 1
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: -113.8, y: 0.15, z: 33.6}
+  m_LocalScale: {x: 0.25, y: 0.25, z: 0.8}
+  m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 2019814251}
   - {fileID: 511865867}
   m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 90, y: 90, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!54 &539341016
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -6352,6 +6351,24 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 0
   m_CollisionDetection: 0
+--- !u!114 &539341017
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 539341010}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 81d9f10a74b45ef4c88319e59871ab12, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::PickupPrompt
+  promptKey: E
+  actionText: Recoger
+  objectDisplayName: Linterna
+  maxDistance: 6
+  heightOffset: 0.35
+  showWorldBadge: 1
 --- !u!1001 &542971577
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -27878,7 +27895,7 @@ PrefabInstance:
     - target: {fileID: 7576988177294063060, guid: 0414d4207c420e645858a3918af46537,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 1.0437568
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 7576988177294063060, guid: 0414d4207c420e645858a3918af46537,
         type: 3}

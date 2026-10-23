@@ -25,7 +25,11 @@ public class PickUpScript : MonoBehaviour
     private Rigidbody heldObjRb;
     private Linterna heldLinterna;
 
+    private GameObject hoveredObj;
+    private string hoveredObjName = "";
+
     public GameObject HeldObj => heldObj;
+    public GameObject HoveredObj => hoveredObj;
     public bool IsHoldingObject => heldObj != null;
     public bool IsHoldingSoundObject => heldObj != null && (heldObj.GetComponentInChildren<RastreoSonoro>() != null || heldObj.CompareTag("canPickUp"));
 
@@ -54,7 +58,37 @@ public class PickUpScript : MonoBehaviour
         }
 
         if (heldObj == null)
+        {
+            RaycastHit hit;
+            if (Physics.Raycast(transform.position, transform.forward, out hit, pickUpRange))
+            {
+                if (hit.transform.CompareTag("canPickUp"))
+                {
+                    hoveredObj = hit.transform.gameObject;
+                    PickupPrompt prompt = hoveredObj.GetComponent<PickupPrompt>();
+                    if (prompt != null && !string.IsNullOrEmpty(prompt.objectDisplayName))
+                    {
+                        hoveredObjName = prompt.objectDisplayName;
+                    }
+                    else
+                    {
+                        string n = hoveredObj.name.Replace("(Clone)", "").Trim();
+                        hoveredObjName = n.ToLower().Contains("linterna") ? "Linterna" : n;
+                    }
+                }
+                else
+                {
+                    hoveredObj = null;
+                }
+            }
+            else
+            {
+                hoveredObj = null;
+            }
             return;
+        }
+
+        hoveredObj = null;
 
         // La linterna no se rota a mano
         if (heldLinterna == null && Input.GetKey(KeyCode.R))
@@ -68,8 +102,18 @@ public class PickUpScript : MonoBehaviour
                 localRotation;
         }
 
-        if (Input.GetKeyDown(KeyCode.Mouse0))
-            Throw();
+        if (heldLinterna != null)
+        {
+            // La linterna se enciende con Clic Izquierdo (en Linterna.cs) y se lanza con F
+            if (Input.GetKeyDown(KeyCode.F))
+                Throw();
+        }
+        else
+        {
+            // Para otros objetos, se lanza con F o Clic Izquierdo
+            if (Input.GetKeyDown(KeyCode.F) || Input.GetKeyDown(KeyCode.Mouse0))
+                Throw();
+        }
     }
 
     void LateUpdate()
@@ -205,6 +249,80 @@ public class PickUpScript : MonoBehaviour
         if (Physics.Linecast(from, to, out hit, mask, QueryTriggerInteraction.Ignore))
         {
             heldObj.transform.position = hit.point + hit.normal * safeDropMargin;
+        }
+    }
+
+    private static GUIStyle hudPromptStyle;
+    private static Texture2D hudBgTex;
+
+    private void OnGUI()
+    {
+        InitHUDStyles();
+
+        // 1. Si sostiene un objeto: mostrar controles en la parte inferior
+        if (heldObj != null)
+        {
+            float w = 460f;
+            float h = 40f;
+            float x = (Screen.width - w) * 0.5f;
+            float y = Screen.height - 70f;
+            Rect bgRect = new Rect(x, y, w, h);
+
+            Color oldColor = GUI.color;
+            GUI.color = new Color(0.06f, 0.08f, 0.12f, 0.88f);
+            GUI.DrawTexture(bgRect, hudBgTex != null ? hudBgTex : Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 8f);
+            GUI.color = oldColor;
+
+            string promptText;
+            if (heldLinterna != null)
+            {
+                promptText = $"<b><color=#FFD700>[ Clic Izq ]</color></b> Linterna ({(heldLinterna.encendida ? "ON" : "OFF")})  |  <b><color=#FFD700>[ F ]</color></b> Lanzar  |  <b><color=#FFD700>[ E ]</color></b> Soltar";
+            }
+            else
+            {
+                promptText = "<b><color=#FFD700>[ F ]</color></b> Lanzar  |  <b><color=#FFD700>[ E ]</color></b> Soltar  |  <b><color=#FFD700>[ R ]</color></b> Rotar";
+            }
+
+            GUI.Label(bgRect, promptText, hudPromptStyle);
+        }
+        // 2. Si está apuntando a un objeto que se puede recoger con la E:
+        else if (hoveredObj != null)
+        {
+            float w = 270f;
+            float h = 38f;
+            float x = (Screen.width - w) * 0.5f;
+            float y = Screen.height * 0.5f + 40f;
+            Rect bgRect = new Rect(x, y, w, h);
+
+            Color oldColor = GUI.color;
+            GUI.color = new Color(0.06f, 0.08f, 0.12f, 0.90f);
+            GUI.DrawTexture(bgRect, hudBgTex != null ? hudBgTex : Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 8f);
+            GUI.color = oldColor;
+
+            string text = $"<b><color=#FFD700>[ E ]</color></b>  Recoger {hoveredObjName}";
+            GUI.Label(bgRect, text, hudPromptStyle);
+        }
+    }
+
+    private static void InitHUDStyles()
+    {
+        if (hudPromptStyle == null)
+        {
+            hudPromptStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                fontSize = 15,
+                fontStyle = FontStyle.Normal,
+                richText = true
+            };
+            hudPromptStyle.normal.textColor = Color.white;
+        }
+
+        if (hudBgTex == null)
+        {
+            hudBgTex = new Texture2D(1, 1);
+            hudBgTex.SetPixel(0, 0, Color.white);
+            hudBgTex.Apply();
         }
     }
 }

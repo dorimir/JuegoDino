@@ -1,5 +1,11 @@
 using UnityEngine;
 
+/// <summary>
+/// Inteligencia Artificial específica para el dinosaurio ciego.
+/// Hereda de EnemyAI y reemplaza por completo la visión por audición/detección de ruidos:
+/// pasos del jugador (caminar, correr, saltar) y objetos de distracción sonoros (RastreoSonoro).
+/// Posee estados propios: BlindPatrolState, BlindInvestigateState y BlindChaseState.
+/// </summary>
 public class BlindEnemyAI : EnemyAI
 {
     [Header("Audición y Sonido")]
@@ -39,6 +45,7 @@ public class BlindEnemyAI : EnemyAI
     public Transform LastSoundSource { get; set; }
     public float LastHeardTime { get; set; }
 
+    // El dinosaurio es ciego: no ve al jugador ni a otros dinosaurios
     public override bool CanSeePlayer() => false;
     public override bool CanSeeSpecificDino(EnemyAI targetDino) => false;
     public override bool CanSeeBigDino(out EnemyAI spottedPredator) { spottedPredator = null; return false; }
@@ -69,6 +76,7 @@ public class BlindEnemyAI : EnemyAI
         BlindPatrol = new BlindPatrolState(this);
         BlindInvestigate = new BlindInvestigateState(this);
         BlindChase = new BlindChaseState(this);
+        FleeState = new FleeState(this);
 
         PatrolState = BlindPatrol;
         ChaseState = BlindChase;
@@ -76,12 +84,54 @@ public class BlindEnemyAI : EnemyAI
         StateMachine.AllowState(BlindPatrol);
         StateMachine.AllowState(BlindInvestigate);
         StateMachine.AllowState(BlindChase);
+        StateMachine.AllowState(FleeState);
+    }
+
+    /// <summary>
+    /// Aunque el dinosaurio es ciego para el sigilo y la visión normal,
+    /// posee un campo frontal sensible a la luz directa de la linterna.
+    /// </summary>
+    public override float GetVisionOrFacingCone()
+    {
+        return 110f;
+    }
+
+    /// <summary>
+    /// El dinosaurio grande también huye del jugador si este enciende y apaga la linterna
+    /// apuntándole dentro de su cono de visión/campo frontal.
+    /// </summary>
+    public override void TriggerScaredByLight(Transform threatPlayer)
+    {
+        if (threatPlayer == null) EnsurePlayerReference();
+        Transform threat = threatPlayer != null ? threatPlayer : Player;
+        if (threat == null) return;
+
+        CurrentThreat = threat;
+        ChasingPredator = null;
+        SpottedThreatPosition = threat.position;
+        SafeRange = 25f;
+
+        if (StateMachine != null && FleeState != null)
+        {
+            if (StateMachine.CurrentState != FleeState)
+            {
+                StateMachine.ChangeState(FleeState);
+            }
+            else
+            {
+                FleeState.Enter();
+            }
+        }
     }
 
     protected override void Start()
     {
         EnsurePlayerReference();
-        if (Movement != null) Movement.speed = patrolSpeed;
+        if (Movement != null)
+        {
+            Movement.speed = patrolSpeed;
+            Movement.SnapToGround(true);
+        }
         SetVisualState(DinoVisualState.Normal);
         StateMachine.Initialize(BlindPatrol);
     }
@@ -128,6 +178,11 @@ public class BlindEnemyAI : EnemyAI
         }
     }
 
+    public override void TriggerFlee(EnemyAI threat)
+    {
+        // El dinosaurio ciego es un depredador alfa y no huye
+    }
+
     public bool CheckForSounds(out Vector3 soundPos, out float intensity, out Transform soundSource)
     {
         soundPos = Vector3.zero;
@@ -167,7 +222,7 @@ public class BlindEnemyAI : EnemyAI
                 playerIntensity = 0.8f;
             }
 
-            if (rb != null && Mathf.Abs(rb.linearVelocity.y) > 2.0f)
+            if ((rb != null && Mathf.Abs(rb.linearVelocity.y) > 2.0f) || (fpm != null && !fpm.IsGrounded()))
             {
                 if (jumpNoiseRadius > playerNoiseRadius)
                 {

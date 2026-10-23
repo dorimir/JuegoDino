@@ -21,6 +21,14 @@ public class EnemyMovement : MonoBehaviour
     public float maxBankAngle = 1.5f;
     public float waypointRadius = 0.75f;
 
+    [Header("Ajuste a Ras de Suelo")]
+    [Tooltip("Distancia hacia abajo para buscar la superficie del suelo.")]
+    public float groundCheckDistance = 10.0f;
+    [Tooltip("Ajuste fino de altura sobre el suelo.")]
+    public float groundOffset = 0.0f;
+    [Tooltip("Velocidad de ajuste vertical para adaptarse a pendientes y desniveles.")]
+    public float groundSnapSpeed = 25.0f;
+
     [Header("Nodos de Patrulla")]
     public List<Node> patrolNodes = new List<Node>();
 
@@ -86,6 +94,7 @@ public class EnemyMovement : MonoBehaviour
 
     void Start()
     {
+        SnapToGround(true);
         if (pathfinding == null) pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
         if (ai == null) ai = GetComponent<EnemyAI>();
 
@@ -115,6 +124,7 @@ public class EnemyMovement : MonoBehaviour
         }
 
         EnemyCollisionHandler.ResolveMutualCollisions(ai, transform, GetInstanceID());
+        SnapToGround(false);
     }
 
     public bool HasClearLineTo(Vector3 targetPosition, float clearanceRadius = -1f)
@@ -432,6 +442,7 @@ public class EnemyMovement : MonoBehaviour
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
         float bodyRadius = isSmall ? 0.28f : 0.50f;
         EnemyCollisionHandler.MoveSafely(ai, transform, ref currentVelocity, displacement, bodyRadius);
+        SnapToGround(false);
     }
 
     public void ClearPath()
@@ -649,6 +660,59 @@ public class EnemyMovement : MonoBehaviour
                 Node randNeighbor = closest.neighbors[Random.Range(0, closest.neighbors.Count)];
                 if (randNeighbor != null) MoveTo(randNeighbor.transform.position);
             }
+        }
+    }
+
+    /// <summary>
+    /// Ajusta la posición vertical del dinosaurio para que camine firmemente a ras de suelo,
+    /// detectando la superficie transitable inferior mediante raycast e ignorando al jugador y otros dinosaurios.
+    /// </summary>
+    public void SnapToGround(bool instant = false)
+    {
+        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
+        float rayHeight = isSmall ? 0.8f : 1.5f;
+        Vector3 rayStart = new Vector3(transform.position.x, transform.position.y + rayHeight, transform.position.z);
+        float maxDist = rayHeight + 4.5f;
+
+        RaycastHit[] hits = Physics.RaycastAll(rayStart, Vector3.down, maxDist, ~((1 << 2) | (1 << 3)), QueryTriggerInteraction.Ignore);
+        RaycastHit bestHit = default;
+        bool foundGround = false;
+        float highestGroundY = float.MinValue;
+
+        for (int i = 0; i < hits.Length; i++)
+        {
+            RaycastHit hit = hits[i];
+            if (hit.collider == null || hit.collider.isTrigger) continue;
+            if (hit.transform == transform || hit.transform.IsChildOf(transform) || transform.IsChildOf(hit.transform)) continue;
+            if (hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null) continue;
+            if (hit.collider.CompareTag("Player") || hit.collider.GetComponentInParent<FirstPersonMovement>() != null) continue;
+            if (hit.collider.CompareTag("canPickUp")) continue;
+
+            // Superficie de suelo transitable
+            if (hit.normal.y >= 0.35f)
+            {
+                if (hit.point.y <= rayStart.y + 0.1f && hit.point.y > highestGroundY)
+                {
+                    highestGroundY = hit.point.y;
+                    bestHit = hit;
+                    foundGround = true;
+                }
+            }
+        }
+
+        if (foundGround)
+        {
+            float targetY = bestHit.point.y;
+            Vector3 pos = transform.position;
+            if (instant)
+            {
+                pos.y = targetY;
+            }
+            else
+            {
+                pos.y = Mathf.MoveTowards(pos.y, targetY, 15f * Time.deltaTime);
+            }
+            transform.position = pos;
         }
     }
 }

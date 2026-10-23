@@ -59,6 +59,60 @@ public class FirstPersonAudio : MonoBehaviour
         if (!groundCheck) groundCheck = (transform.parent ?? transform).GetComponentInChildren<GroundCheck>();
         if (!jump) jump = GetComponentInParent<Jump>();
         if (!crouch) crouch = GetComponentInParent<Crouch>();
+
+        if (stepAudio != null)
+        {
+            stepAudio.loop = true;
+            stepAudio.spatialBlend = 0f;
+        }
+
+        if (runningAudio != null)
+        {
+            runningAudio.loop = true;
+            runningAudio.spatialBlend = 0f;
+        }
+
+        if (crouchedAudio != null)
+        {
+            crouchedAudio.loop = true;
+            crouchedAudio.spatialBlend = 0f;
+        }
+
+        if (landingAudio != null)
+        {
+            landingAudio.spatialBlend = 0f;
+        }
+
+        if (!jumpAudio)
+        {
+            jumpAudio = GetOrCreateAudioSource("Jump Audio");
+        }
+        if (jumpAudio != null)
+        {
+            jumpAudio.spatialBlend = 0f;
+        }
+
+        // Auto-cargar clips si los arrays vinieron vacíos del prefab
+        if (jumpSFX == null || jumpSFX.Length == 0)
+        {
+            jumpSFX = Resources.FindObjectsOfTypeAll<AudioClip>()
+                .Where(c => c != null && c.name.ToLower().StartsWith("jump"))
+                .ToArray();
+        }
+
+        if (crouchStartSFX == null || crouchStartSFX.Length == 0)
+        {
+            crouchStartSFX = Resources.FindObjectsOfTypeAll<AudioClip>()
+                .Where(c => c != null && c.name.ToLower().Contains("crouch start"))
+                .ToArray();
+        }
+
+        if (crouchEndSFX == null || crouchEndSFX.Length == 0)
+        {
+            crouchEndSFX = Resources.FindObjectsOfTypeAll<AudioClip>()
+                .Where(c => c != null && c.name.ToLower().Contains("crouch end"))
+                .ToArray();
+        }
     }
 
     void OnEnable() => SubscribeToEvents();
@@ -78,15 +132,36 @@ public class FirstPersonAudio : MonoBehaviour
             bool isCrouched = (crouch != null && crouch.IsCrouched) || (character != null && character.IsCrouched);
             if (isCrouched)
             {
-                SetPlayingMovingAudio(crouchedAudio);
+                if (crouchedAudio != null)
+                {
+                    SetPlayingMovingAudio(crouchedAudio);
+                }
+                else if (stepAudio != null)
+                {
+                    stepAudio.pitch = 0.75f;
+                    SetPlayingMovingAudio(stepAudio);
+                }
             }
             else if (character.IsRunning)
             {
-                SetPlayingMovingAudio(runningAudio);
+                if (runningAudio != null)
+                {
+                    SetPlayingMovingAudio(runningAudio);
+                }
+                else if (stepAudio != null)
+                {
+                    // Fallback para correr: pasos a mayor ritmo y pitch
+                    stepAudio.pitch = 1.35f;
+                    SetPlayingMovingAudio(stepAudio);
+                }
             }
             else
             {
-                SetPlayingMovingAudio(stepAudio);
+                if (stepAudio != null)
+                {
+                    stepAudio.pitch = 1.0f;
+                    SetPlayingMovingAudio(stepAudio);
+                }
             }
         }
         else
@@ -99,12 +174,17 @@ public class FirstPersonAudio : MonoBehaviour
 
     void SetPlayingMovingAudio(AudioSource audioToPlay)
     {
-        foreach (var audio in MovingAudios.Where(audio => audio != audioToPlay && audio != null))
+        AudioSource[] audios = MovingAudios;
+        for (int i = 0; i < audios.Length; i++)
         {
-            audio.Pause();
+            AudioSource a = audios[i];
+            if (a != null && a != audioToPlay && a.isPlaying)
+            {
+                a.Pause();
+            }
         }
 
-        if (audioToPlay && !audioToPlay.isPlaying)
+        if (audioToPlay != null && !audioToPlay.isPlaying)
         {
             audioToPlay.Play();
         }

@@ -65,7 +65,6 @@ public class RuidoJugador : MonoBehaviour
     {
         if (Sonando == anterior) return;
         anterior = Sonando;
-        Debug.Log(Sonando ? "[RUIDO JUGADOR] ACTIVO" : "[RUIDO JUGADOR] SILENCIO");
     }
 
     private void OnDrawGizmosSelected()

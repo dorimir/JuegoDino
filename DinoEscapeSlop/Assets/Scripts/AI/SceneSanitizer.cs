@@ -8,6 +8,9 @@ public static class SceneSanitizer
         EliminarPilares();
         AsegurarBoxCollidersEnMuros();
         AsegurarMeshCollidersEnDinosaurios();
+        AsegurarPickupPrompts();
+        AsegurarPosicionLinterna();
+        AsegurarAudioListenerUnico();
     }
 
     public static void EliminarPilares()
@@ -83,6 +86,81 @@ public static class SceneSanitizer
             else
             {
                 mc.convex = true;
+            }
+        }
+    }
+
+    public static void AsegurarPickupPrompts()
+    {
+        GameObject[] allObjects = Object.FindObjectsByType<GameObject>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (GameObject go in allObjects)
+        {
+            if (go == null) continue;
+
+            bool isPickup = go.CompareTag("canPickUp") || go.GetComponent<Linterna>() != null || go.GetComponent<RastreoSonoro>() != null;
+            if (isPickup)
+            {
+                // Ignorar jugador, cámaras o controladores
+                if (go.CompareTag("Player") || go.GetComponent<Camera>() != null || go.GetComponent<FirstPersonMovement>() != null)
+                    continue;
+
+                PickupPrompt prompt = go.GetComponent<PickupPrompt>();
+                if (prompt == null)
+                {
+                    prompt = go.AddComponent<PickupPrompt>();
+                }
+
+                if (go.GetComponent<Linterna>() != null)
+                {
+                    prompt.objectDisplayName = "Linterna";
+                }
+                else if (go.GetComponent<RastreoSonoro>() != null)
+                {
+                    prompt.objectDisplayName = "Objeto Sonoro";
+                }
+            }
+        }
+    }
+
+    public static void AsegurarPosicionLinterna()
+    {
+        GameObject player = GameObject.FindGameObjectWithTag("Player");
+        Linterna linterna = Object.FindAnyObjectByType<Linterna>();
+        if (player != null && linterna != null)
+        {
+            Vector3 sideOffset = player.transform.right * 0.75f + player.transform.forward * 0.35f;
+            Vector3 spawnPos = player.transform.position + sideOffset;
+            spawnPos.y = player.transform.position.y + 0.12f;
+
+            if (Physics.Raycast(spawnPos + Vector3.up * 0.5f, Vector3.down, out RaycastHit hit, 2f, ~((1 << 2) | (1 << 3)), QueryTriggerInteraction.Ignore))
+            {
+                spawnPos.y = hit.point.y + 0.12f;
+            }
+
+            linterna.transform.position = spawnPos;
+            linterna.transform.rotation = Quaternion.identity;
+        }
+    }
+
+    public static void AsegurarAudioListenerUnico()
+    {
+        AudioListener[] listeners = Object.FindObjectsByType<AudioListener>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        Camera playerCam = Camera.main;
+        if (playerCam == null)
+        {
+            GameObject p = GameObject.FindGameObjectWithTag("Player");
+            if (p != null) playerCam = p.GetComponentInChildren<Camera>();
+        }
+
+        AudioListener primaryListener = (playerCam != null) ? playerCam.GetComponent<AudioListener>() : null;
+        for (int i = 0; i < listeners.Length; i++)
+        {
+            AudioListener al = listeners[i];
+            if (al == null) continue;
+
+            if (primaryListener != null && al != primaryListener)
+            {
+                al.enabled = false;
             }
         }
     }

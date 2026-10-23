@@ -61,8 +61,12 @@ public static class PreyDistribution
 
             Node targetNode = chosenNodes[i % chosenNodes.Count];
             Vector3 spawnPos = targetNode.transform.position;
-            spawnPos.y = prey.transform.position.y;
             prey.transform.position = spawnPos;
+
+            if (prey.Movement != null)
+            {
+                prey.Movement.SnapToGround(true);
+            }
 
             if (targetNode.neighbors != null && targetNode.neighbors.Count > 0 && targetNode.neighbors[0] != null)
             {
