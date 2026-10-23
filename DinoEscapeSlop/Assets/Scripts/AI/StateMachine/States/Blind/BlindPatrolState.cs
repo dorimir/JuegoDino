@@ -28,6 +28,12 @@ public class BlindPatrolState : PatrolState
     {
         if (blindAI != null && blindAI.CheckForSounds(out Vector3 soundPos, out float intensity, out Transform soundSource))
         {
+            if (soundSource != null)
+            {
+                EnemyAI sourceAI = soundSource.GetComponentInParent<EnemyAI>();
+                if (sourceAI != null && sourceAI.IsSmallDino) return false;
+            }
+
             if (intensity >= blindAI.highUrgencyThreshold)
             {
                 blindAI.TriggerAttack(soundSource != null ? soundSource : blindAI.Player);

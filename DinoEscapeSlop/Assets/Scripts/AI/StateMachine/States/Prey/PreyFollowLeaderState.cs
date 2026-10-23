@@ -8,7 +8,7 @@ public class PreyFollowLeaderState : FollowLeaderState
 
     public override void Update()
     {
-        if (ai.CanSeeBigDino(out EnemyAI bigDino))
+        if (ai.CanSeeBigDino(out EnemyAI bigDino) && !(bigDino is BlindEnemyAI))
         {
             ai.NotifyPackFlee(bigDino);
             return;

@@ -8,7 +8,7 @@ public class PreyPatrolState : PatrolState
 
     protected override bool CheckPerceptions()
     {
-        if (ai.CanSeeBigDino(out EnemyAI bigDino))
+        if (ai.CanSeeBigDino(out EnemyAI bigDino) && !(bigDino is BlindEnemyAI))
         {
             ai.NotifyPackFlee(bigDino);
             return true;

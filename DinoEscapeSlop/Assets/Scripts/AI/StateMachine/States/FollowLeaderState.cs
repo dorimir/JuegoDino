@@ -31,6 +31,22 @@ public class FollowLeaderState : IState
             return;
         }
 
+        // Percepciones para depredador grande seguidor (EnemyAI)
+        if (ai.IsBigDino)
+        {
+            if (ai.CanSeePlayer())
+            {
+                ai.TriggerAttack(ai.Player);
+                return;
+            }
+
+            if (ai.preyCooldownTimer <= 0f && ai.CanSeePrey(out EnemyAI smallDino))
+            {
+                ai.TriggerAttack(smallDino.transform, smallDino);
+                return;
+            }
+        }
+
         if (ai.Movement == null) return;
 
         int slotIndex = leader.packFollowers.IndexOf(ai);

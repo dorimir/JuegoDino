@@ -110,7 +110,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
   Player: {fileID: 0}
-  isLeader: 1
+  isLeader: 0
   leaderTransform: {fileID: 0}
   packFollowers: []
   IsPrey: 0

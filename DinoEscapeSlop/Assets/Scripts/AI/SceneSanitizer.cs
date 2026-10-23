@@ -1,4 +1,4 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public static class SceneSanitizer
 {
@@ -8,9 +8,11 @@ public static class SceneSanitizer
         EliminarPilares();
         AsegurarBoxCollidersEnMuros();
         AsegurarMeshCollidersEnDinosaurios();
+        ValidarArquetiposDinosaurios();
         AsegurarPickupPrompts();
         AsegurarPosicionLinterna();
         AsegurarAudioListenerUnico();
+        AsegurarEnemigosEnNodos();
     }
 
     public static void EliminarPilares()
@@ -87,6 +89,39 @@ public static class SceneSanitizer
             {
                 mc.convex = true;
             }
+
+
+        }
+    }
+
+    public static void ValidarArquetiposDinosaurios()
+    {
+        EnemyAI[] enemies = Object.FindObjectsByType<EnemyAI>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (EnemyAI enemy in enemies)
+        {
+            if (enemy == null) continue;
+
+            if (enemy is BlindEnemyAI blind)
+            {
+                blind.IsPrey = false;
+                blind.dinoCiego = true;
+                blind.isLeader = false;
+                blind.leaderTransform = null;
+                blind.packFollowers.Clear();
+            }
+            else if (enemy is SmallEnemyAI small)
+            {
+                small.IsPrey = true;
+                small.dinoCiego = false;
+            }
+            else
+            {
+                // Dinosaurio grande básico (EnemyAI)
+                enemy.IsPrey = false;
+                enemy.dinoCiego = false;
+            }
+
+            enemy.UpdateStaticCategory();
         }
     }
 
@@ -161,6 +196,17 @@ public static class SceneSanitizer
             if (primaryListener != null && al != primaryListener)
             {
                 al.enabled = false;
+            }
+        }
+    }
+    public static void AsegurarEnemigosEnNodos()
+    {
+        EnemyMovement[] allMovements = Object.FindObjectsByType<EnemyMovement>(FindObjectsInactive.Include, FindObjectsSortMode.None);
+        foreach (EnemyMovement mov in allMovements)
+        {
+            if (mov != null && mov.gameObject.activeInHierarchy)
+            {
+                mov.SnapToNode();
             }
         }
     }

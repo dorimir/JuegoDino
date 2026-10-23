@@ -138,6 +138,16 @@ public class BlindEnemyAI : EnemyAI
 
     public override void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
+        // Los dinosaurios ciegos no atacan a los pequeños
+        if (targetDino != null && targetDino.IsSmallDino) return;
+        if (target != null)
+        {
+            EnemyAI targetAI = target.GetComponentInParent<EnemyAI>();
+            if (targetAI != null && targetAI.IsSmallDino) return;
+        }
+
+        TargetDino = null;
+
         if (target != null)
         {
             CurrentChaseTarget = target;
@@ -154,6 +164,12 @@ public class BlindEnemyAI : EnemyAI
 
     public virtual void TriggerInvestigate(Vector3 soundPos, Transform source = null)
     {
+        if (source != null)
+        {
+            EnemyAI sourceAI = source.GetComponentInParent<EnemyAI>();
+            if (sourceAI != null && sourceAI.IsSmallDino) return;
+        }
+
         LastHeardSoundPos = soundPos;
         LastSoundSource = source;
 

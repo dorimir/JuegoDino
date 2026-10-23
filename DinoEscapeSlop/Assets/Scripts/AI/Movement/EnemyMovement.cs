@@ -50,6 +50,8 @@ public class EnemyMovement : MonoBehaviour
     public float CurrentForwardSpeed => currentVelocity.magnitude;
     public Vector3 Velocity => currentVelocity;
     public bool HasReachedDestination { get; private set; } = true;
+    public Vector3 SpawnPosition { get; private set; }
+    public Quaternion SpawnRotation { get; private set; }
 
     public void ResetVelocity()
     {
@@ -63,9 +65,16 @@ public class EnemyMovement : MonoBehaviour
         if (pathfinding == null) pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
         ai = GetComponent<EnemyAI>();
         HasReachedDestination = true;
+        SpawnPosition = transform.position;
+        SpawnRotation = transform.rotation;
 
         lastStuckCheckPosition = transform.position;
         lastWaypointPos = transform.position;
+
+        if (patrolNodes != null)
+        {
+            patrolNodes.RemoveAll(n => n == null);
+        }
 
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
 
@@ -94,7 +103,7 @@ public class EnemyMovement : MonoBehaviour
 
     void Start()
     {
-        SnapToGround(true);
+        SnapToNode();
         if (pathfinding == null) pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
         if (ai == null) ai = GetComponent<EnemyAI>();
 
@@ -106,11 +115,16 @@ public class EnemyMovement : MonoBehaviour
 
         if (patrolNodes != null && patrolNodes.Count > 0)
         {
+            int foundIdx = patrolNodes.FindIndex(n => n == currentDestinationNode);
+            if (foundIdx >= 0)
+            {
+                currentPatrolIndex = foundIdx;
+            }
             GoToNextPatrolNode();
         }
         else
         {
-            GoToNearestPatrolNode();
+            GoToNextPatrolNode();
         }
     }
 
@@ -118,7 +132,7 @@ public class EnemyMovement : MonoBehaviour
     {
         FollowPathAStar();
 
-        if (ai == null && HasReachedDestination && patrolNodes != null && patrolNodes.Count > 0)
+        if (ai == null && HasReachedDestination)
         {
             GoToNextPatrolNode();
         }
@@ -129,12 +143,18 @@ public class EnemyMovement : MonoBehaviour
 
     public bool HasClearLineTo(Vector3 targetPosition, float clearanceRadius = -1f)
     {
+        if (patrolNodes != null)
+        {
+            patrolNodes.RemoveAll(n => n == null);
+        }
+
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
         if (clearanceRadius < 0f) clearanceRadius = isSmall ? 0.20f : 0.35f;
 
         float rayHeight = isSmall ? 0.45f : 0.85f;
         Vector3 origin = new Vector3(transform.position.x, transform.position.y + rayHeight, transform.position.z);
-        Vector3 target = new Vector3(targetPosition.x, transform.position.y + rayHeight, targetPosition.z);
+        float targetY = (Mathf.Abs(targetPosition.y - transform.position.y) > 0.5f) ? targetPosition.y + rayHeight : transform.position.y + rayHeight;
+        Vector3 target = new Vector3(targetPosition.x, targetY, targetPosition.z);
         Vector3 dir = target - origin;
         float dist = dir.magnitude;
 
@@ -148,7 +168,14 @@ public class EnemyMovement : MonoBehaviour
             if (lineHit.collider != null && !lineHit.collider.transform.IsChildOf(transform) && !isEnemy)
             {
                 bool isTargetPlayer = (ai != null && ai.Player != null && (lineHit.transform == ai.Player || lineHit.transform.IsChildOf(ai.Player)));
-                if (!isTargetPlayer && lineHit.normal.y < 0.7f) return false;
+                if (!isTargetPlayer && lineHit.normal.y < 0.7f)
+                {
+                    string colName = lineHit.collider.gameObject.name.ToLower();
+                    if (!colName.Contains("plane") && !colName.Contains("floor") && !colName.Contains("suelo"))
+                    {
+                        return false;
+                    }
+                }
             }
         }
 
@@ -175,7 +202,13 @@ public class EnemyMovement : MonoBehaviour
         return true;
     }
 
-    public bool CanMoveToNode(Node node) => node != null && HasClearLineTo(node.transform.position);
+    public bool CanMoveToNode(Node node)
+    {
+        if (node == null) return false;
+        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
+        float clearance = isSmall ? 0.15f : 0.22f;
+        return HasClearLineTo(node.transform.position, clearance);
+    }
 
     public List<Node> GetReachableNodes()
     {
@@ -214,7 +247,12 @@ public class EnemyMovement : MonoBehaviour
         bool isFollower = (ai != null && ai.IsSmallDino && ai.LeaderAI != null);
         bool isFleeing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.FleeState);
 
-        if ((isChasing || isFollower || isFleeing) && HasClearLineTo(targetPosition))
+        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
+        float clearance = isSmall ? 0.20f : 0.35f;
+
+        // Comprobación de raycast para saber si el objetivo es directamente alcanzable desde la posición actual:
+        // Si el objetivo es alcanzable ya, no hace falta que pase por ningún intermediario.
+        if (HasClearLineTo(targetPosition, clearance))
         {
             currentPath = null;
             targetIndex = 0;
@@ -233,19 +271,33 @@ public class EnemyMovement : MonoBehaviour
         if (pathfinding != null)
         {
             CancelInvoke();
-            currentPath = pathfinding.FindPath(transform.position, targetPosition);
+            // Navegación mediante las conexiones (neighbors) de los nodos con optimización de raycast
+            currentPath = pathfinding.FindPath(transform.position, targetPosition, clearance);
 
             if (currentPath != null && currentPath.Count > 0)
             {
                 targetIndex = 0;
                 if (currentPath.Count > 1)
                 {
-                    float distToFirst = Vector2.Distance(
-                        new Vector2(transform.position.x, transform.position.z),
-                        new Vector2(currentPath[0].x, currentPath[0].z)
-                    );
+                    Vector3 toFirst = currentPath[0] - transform.position;
+                    toFirst.y = 0f;
+                    float distToFirst = toFirst.magnitude;
 
-                    if (distToFirst <= 0.4f)
+                    Vector3 toSecond = currentPath[1] - transform.position;
+                    toSecond.y = 0f;
+
+                    bool firstIsBehind = (distToFirst > 0.05f) && (Vector3.Dot(transform.forward, toFirst.normalized) < 0.1f);
+                    bool clearToSecond = HasClearLineTo(currentPath[1]);
+
+                    if (distToFirst <= 0.8f && clearToSecond)
+                    {
+                        targetIndex = 1;
+                    }
+                    else if (firstIsBehind && clearToSecond)
+                    {
+                        targetIndex = 1;
+                    }
+                    else if (clearToSecond && distToFirst <= 1.5f && toSecond.sqrMagnitude < toFirst.sqrMagnitude)
                     {
                         targetIndex = 1;
                     }
@@ -300,10 +352,28 @@ public class EnemyMovement : MonoBehaviour
         bool isChasing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.ChaseState);
         bool isFollower = (ai != null && ai.IsSmallDino && ai.LeaderAI != null);
         bool isFleeing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.FleeState);
+        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
+        float clearance = isSmall ? 0.20f : 0.35f;
 
-        if ((isChasing || isFollower || isFleeing) && hasDirectTarget && HasClearLineTo(directTargetPosition))
+        // Comprobación de raycast continua: si el objetivo final ya es directamente alcanzable desde la posición actual,
+        // no hace falta que pase por ningún intermediario restante; vamos directamente al objetivo.
+        if (hasDirectTarget && HasClearLineTo(directTargetPosition, clearance))
         {
             currentPath = null;
+        }
+        else if (currentPath != null && currentPath.Count > 0 && targetIndex < currentPath.Count)
+        {
+            // Atajo dinámico por raycast: comprobamos desde el último nodo hacia adelante si ya es visible.
+            // Si cualquier nodo más lejano del camino es alcanzable directamente, saltamos todos los intermediarios.
+            for (int i = currentPath.Count - 1; i > targetIndex; i--)
+            {
+                if (HasClearLineTo(currentPath[i], clearance))
+                {
+                    targetIndex = i;
+                    lastWaypointPos = transform.position;
+                    break;
+                }
+            }
         }
 
         Vector3 targetWaypoint;
@@ -375,8 +445,28 @@ public class EnemyMovement : MonoBehaviour
                 else
                 {
                     hasDirectTarget = false;
-                    HasReachedDestination = true;
-                    return;
+                    // Encadenamiento continuo de patrulla para evitar detenerse en cada nodo
+                    GoToNextPatrolNode();
+
+                    if (currentPath != null && currentPath.Count > 0 && targetIndex < currentPath.Count)
+                    {
+                        targetWaypoint = currentPath[targetIndex];
+                        toWaypoint = new Vector3(targetWaypoint.x - transform.position.x, 0f, targetWaypoint.z - transform.position.z);
+                        distToWaypoint = toWaypoint.magnitude;
+                        desiredDirection = distToWaypoint > 0.001f ? toWaypoint.normalized : transform.forward;
+                    }
+                    else if (hasDirectTarget)
+                    {
+                        targetWaypoint = directTargetPosition;
+                        toWaypoint = new Vector3(targetWaypoint.x - transform.position.x, 0f, targetWaypoint.z - transform.position.z);
+                        distToWaypoint = toWaypoint.magnitude;
+                        desiredDirection = distToWaypoint > 0.001f ? toWaypoint.normalized : transform.forward;
+                    }
+                    else
+                    {
+                        HasReachedDestination = true;
+                        return;
+                    }
                 }
             }
         }
@@ -398,8 +488,7 @@ public class EnemyMovement : MonoBehaviour
                 }
                 else
                 {
-                    if (patrolNodes != null && patrolNodes.Count > 0) GoToNextPatrolNode();
-                    else ClearPath();
+                    GoToNextPatrolNode();
                 }
 
                 transform.position += desiredDirection * 0.2f;
@@ -407,6 +496,11 @@ public class EnemyMovement : MonoBehaviour
 
             lastStuckCheckPosition = transform.position;
             stuckTimer = 0f;
+        }
+
+        if (distToWaypoint > 0.35f)
+        {
+            desiredDirection = ApplyWhiskerAvoidance(desiredDirection, isSmall);
         }
 
         float turnAngle = Vector3.Angle(transform.forward, desiredDirection);
@@ -439,7 +533,6 @@ public class EnemyMovement : MonoBehaviour
         transform.rotation = horizontalRot * Quaternion.Euler(0f, 0f, currentBankAngle);
 
         Vector3 displacement = currentVelocity * Time.deltaTime;
-        bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
         float bodyRadius = isSmall ? 0.28f : 0.50f;
         EnemyCollisionHandler.MoveSafely(ai, transform, ref currentVelocity, displacement, bodyRadius);
         SnapToGround(false);
@@ -664,11 +757,106 @@ public class EnemyMovement : MonoBehaviour
     }
 
     /// <summary>
+    /// Posiciona al dinosaurio exactamente sobre el nodo de navegaciÃ³n del mapa correspondiente a su spawn.
+    /// Establece transform.position en el transform.position exacto del nodo.
+    /// </summary>
+    public void SnapToNode()
+    {
+        if (pathfinding == null) pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
+        Node spawnNode = (pathfinding != null) ? pathfinding.GetClosestNode(transform.position) : null;
+
+        if (spawnNode != null)
+        {
+            // Spawn exactamente en el transform.position del nodo del mapa
+            transform.position = spawnNode.transform.position;
+            SpawnPosition = spawnNode.transform.position;
+
+            if (spawnNode.neighbors != null && spawnNode.neighbors.Count > 0 && spawnNode.neighbors[0] != null)
+            {
+                Vector3 fwd = spawnNode.neighbors[0].transform.position - transform.position;
+                fwd.y = 0;
+                if (fwd.sqrMagnitude > 0.001f)
+                {
+                    transform.rotation = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+                }
+            }
+            SpawnRotation = transform.rotation;
+
+            SetCurrentDestinationNode(spawnNode);
+        }
+    }
     /// Ajusta la posición vertical del dinosaurio para que camine firmemente a ras de suelo,
     /// detectando la superficie transitable inferior mediante raycast e ignorando al jugador y otros dinosaurios.
     /// </summary>
+    /// <summary>
+    /// DesviaciÃ³n predictiva mediante 'bigotes' laterales (raycasts a Â±28 grados).
+    /// Detecta marcos de puertas y esquinas antes de colisionar fÃ­sicamente, guiando suavemente al dinosaurio.
+    /// </summary>
+    private Vector3 ApplyWhiskerAvoidance(Vector3 desiredDir, bool isSmall)
+    {
+        float rayHeight = isSmall ? 0.45f : 0.85f;
+        Vector3 origin = transform.position + Vector3.up * rayHeight;
+        float whiskerLength = isSmall ? 1.0f : 1.4f;
+        float whiskerAngle = 28f;
+        int wallLayerMask = ~((1 << 3) | (1 << 2));
+
+        Vector3 leftDir = Quaternion.Euler(0f, -whiskerAngle, 0f) * transform.forward;
+        Vector3 rightDir = Quaternion.Euler(0f, whiskerAngle, 0f) * transform.forward;
+
+        Vector3 avoidanceForce = Vector3.zero;
+
+        // Bigote izquierdo: si detecta obstÃ¡culo, empuja suavemente hacia la derecha
+        if (Physics.Raycast(origin, leftDir, out RaycastHit leftHit, whiskerLength, wallLayerMask, QueryTriggerInteraction.Ignore))
+        {
+            if (IsValidWallObstacle(leftHit))
+            {
+                float strength = 1.0f - (leftHit.distance / whiskerLength);
+                avoidanceForce += transform.right * (strength * 0.9f);
+            }
+        }
+
+        // Bigote derecho: si detecta obstÃ¡culo, empuja suavemente hacia la izquierda
+        if (Physics.Raycast(origin, rightDir, out RaycastHit rightHit, whiskerLength, wallLayerMask, QueryTriggerInteraction.Ignore))
+        {
+            if (IsValidWallObstacle(rightHit))
+            {
+                float strength = 1.0f - (rightHit.distance / whiskerLength);
+                avoidanceForce -= transform.right * (strength * 0.9f);
+            }
+        }
+
+        if (avoidanceForce.sqrMagnitude > 0.001f)
+        {
+            Vector3 blended = (desiredDir + avoidanceForce).normalized;
+            blended.y = 0f;
+            return blended.sqrMagnitude > 0.001f ? blended : desiredDir;
+        }
+
+        return desiredDir;
+    }
+
+    private bool IsValidWallObstacle(RaycastHit hit)
+    {
+        if (hit.collider == null) return false;
+        if (hit.transform == transform || hit.transform.IsChildOf(transform) || transform.IsChildOf(hit.transform)) return false;
+        if (hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null) return false;
+        if (hit.collider.CompareTag("Player") || hit.collider.GetComponentInParent<FirstPersonMovement>() != null) return false;
+        if (ai != null && ai.Player != null && (hit.transform == ai.Player || hit.transform.IsChildOf(ai.Player))) return false;
+        if (hit.normal.y >= 0.7f) return false;
+
+        string name = hit.collider.gameObject.name.ToLower();
+        if (name.Contains("plane") || name.Contains("floor") || name.Contains("suelo")) return false;
+
+        return true;
+    }
+
     public void SnapToGround(bool instant = false)
     {
+        if (patrolNodes != null)
+        {
+            patrolNodes.RemoveAll(n => n == null);
+        }
+
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
         float rayHeight = isSmall ? 0.8f : 1.5f;
         Vector3 rayStart = new Vector3(transform.position.x, transform.position.y + rayHeight, transform.position.z);

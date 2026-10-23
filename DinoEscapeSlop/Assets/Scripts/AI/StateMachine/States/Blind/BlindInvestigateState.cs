@@ -39,6 +39,12 @@ public class BlindInvestigateState : IState
     {
         if (ai.CheckForSounds(out Vector3 newSoundPos, out float intensity, out Transform soundSource))
         {
+            if (soundSource != null)
+            {
+                EnemyAI sourceAI = soundSource.GetComponentInParent<EnemyAI>();
+                if (sourceAI != null && sourceAI.IsSmallDino) return;
+            }
+
             if (intensity >= ai.highUrgencyThreshold)
             {
                 ai.TriggerAttack(soundSource != null ? soundSource : ai.Player);

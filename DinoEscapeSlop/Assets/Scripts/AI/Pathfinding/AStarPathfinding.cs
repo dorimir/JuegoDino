@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class AStarPathfinding : MonoBehaviour
@@ -15,12 +15,40 @@ public class AStarPathfinding : MonoBehaviour
         cachedNodes = Object.FindObjectsByType<Node>(FindObjectsSortMode.None);
     }
 
-    public List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos)
+    /// <summary>
+    /// Encuentra una ruta entre startPos y targetPos.
+    /// Utiliza el sistema de raycast para comprobar si el objetivo (o el nodo objetivo) es alcanzable
+    /// directamente desde la posición actual sin pasar por ningún nodo intermediario.
+    /// Si hay obstáculos, navega utilizando las conexiones (neighbors) de cada nodo del mapa.
+    /// </summary>
+    public List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos, float clearanceRadius = 0.35f)
     {
+        // 1. Raycast directo al destino: si el objetivo es directamente alcanzable desde startPos,
+        // no hace falta pasar por ningún intermediario.
+        if (HasClearLine(startPos, targetPos, clearanceRadius))
+        {
+            return new List<Vector3> { targetPos };
+        }
+
         Node startNode = GetClosestNode(startPos);
         Node targetNode = GetClosestNode(targetPos);
 
         if (startNode == null || targetNode == null) return null;
+
+        // 2. Si el nodo objetivo ya es directamente alcanzable por raycast desde startPos:
+        if (HasClearLine(startPos, targetNode.transform.position, clearanceRadius))
+        {
+            List<Vector3> directToTargetNode = new List<Vector3>();
+            float dStartToTargetNodeSqr = (startPos.x - targetNode.transform.position.x) * (startPos.x - targetNode.transform.position.x) + 
+                                          (startPos.z - targetNode.transform.position.z) * (startPos.z - targetNode.transform.position.z);
+            float dTargetNodeToFinalSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) + 
+                                          (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
+
+            if (dStartToTargetNodeSqr > 0.36f) directToTargetNode.Add(targetNode.transform.position);
+            if (dTargetNodeToFinalSqr > 0.36f) directToTargetNode.Add(targetPos);
+            if (directToTargetNode.Count == 0) directToTargetNode.Add(targetPos);
+            return directToTargetNode;
+        }
 
         if (startNode == targetNode)
         {
@@ -36,6 +64,7 @@ public class AStarPathfinding : MonoBehaviour
             return directPath;
         }
 
+        // Navegación A* a través de las conexiones de cada nodo (currentNode.neighbors)
         List<Node> openSet = new List<Node> { startNode };
         HashSet<Node> closedSet = new HashSet<Node>();
 
@@ -65,14 +94,16 @@ public class AStarPathfinding : MonoBehaviour
 
             if (currentNode == targetNode)
             {
-                List<Vector3> path = RetracePath(startNode, targetNode, parentMap);
+                List<Vector3> rawPath = RetracePath(startNode, targetNode, parentMap);
                 float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) + 
                                    (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
-                if (path != null && dTargetSqr > 0.36f)
+                if (rawPath != null && dTargetSqr > 0.36f)
                 {
-                    path.Add(targetPos);
+                    rawPath.Add(targetPos);
                 }
-                return path;
+
+                // Optimización y atajo por raycast: se omiten nodos intermediarios si se puede ver un nodo posterior directamente
+                return OptimizePathWithRaycast(rawPath, startPos, clearanceRadius);
             }
 
             foreach (Node neighbor in currentNode.neighbors)
@@ -96,6 +127,53 @@ public class AStarPathfinding : MonoBehaviour
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Suavizado y atajo de ruta por raycast: si desde un punto se alcanza en línea recta un nodo posterior,
+    /// se omiten todos los nodos intermediarios intermedios.
+    /// </summary>
+    public static List<Vector3> OptimizePathWithRaycast(List<Vector3> rawPath, Vector3 startPos, float clearanceRadius = 0.35f)
+    {
+        if (rawPath == null || rawPath.Count <= 1) return rawPath;
+
+        Vector3 finalPoint = rawPath[rawPath.Count - 1];
+        if (HasClearLine(startPos, finalPoint, clearanceRadius))
+        {
+            return new List<Vector3> { finalPoint };
+        }
+
+        List<Vector3> smoothed = new List<Vector3>();
+        Vector3 currentPoint = startPos;
+        int currentIndex = -1;
+
+        while (currentIndex < rawPath.Count - 1)
+        {
+            int furthestVisible = -1;
+            for (int i = rawPath.Count - 1; i > currentIndex; i--)
+            {
+                if (HasClearLine(currentPoint, rawPath[i], clearanceRadius))
+                {
+                    furthestVisible = i;
+                    break;
+                }
+            }
+
+            if (furthestVisible != -1 && furthestVisible > currentIndex)
+            {
+                smoothed.Add(rawPath[furthestVisible]);
+                currentPoint = rawPath[furthestVisible];
+                currentIndex = furthestVisible;
+            }
+            else
+            {
+                currentIndex++;
+                smoothed.Add(rawPath[currentIndex]);
+                currentPoint = rawPath[currentIndex];
+            }
+        }
+
+        return smoothed;
     }
 
     private List<Vector3> RetracePath(Node startNode, Node endNode, Dictionary<Node, Node> parentMap)
@@ -143,9 +221,9 @@ public class AStarPathfinding : MonoBehaviour
 
     public static bool HasClearLine(Vector3 fromPos, Vector3 toPos, float clearanceRadius = 0.35f)
     {
-        float testHeight = 0.75f;
-        Vector3 origin = new Vector3(fromPos.x, testHeight, fromPos.z);
-        Vector3 target = new Vector3(toPos.x, testHeight, toPos.z);
+        float rayHeight = 0.75f;
+        Vector3 origin = new Vector3(fromPos.x, fromPos.y + rayHeight, fromPos.z);
+        Vector3 target = new Vector3(toPos.x, toPos.y + rayHeight, toPos.z);
         Vector3 dir = target - origin;
         float dist = dir.magnitude;
 
@@ -157,7 +235,11 @@ public class AStarPathfinding : MonoBehaviour
         {
             if (lineHit.collider != null && !lineHit.collider.CompareTag("Enemy") && lineHit.normal.y < 0.7f)
             {
-                return false;
+                string hitName = lineHit.collider.gameObject.name.ToLower();
+                if (!hitName.Contains("plane") && !hitName.Contains("floor") && !hitName.Contains("suelo"))
+                {
+                    return false;
+                }
             }
         }
 
@@ -170,6 +252,8 @@ public class AStarPathfinding : MonoBehaviour
             foreach (var hit in hits)
             {
                 if (hit.collider == null || hit.collider.CompareTag("Enemy") || hit.normal.y >= 0.7f) continue;
+                string colName = hit.collider.gameObject.name.ToLower();
+                if (colName.Contains("plane") || colName.Contains("floor") || colName.Contains("suelo")) continue;
                 return false;
             }
         }
@@ -231,6 +315,12 @@ public class AStarPathfinding : MonoBehaviour
                 minReachableDistSqr = distSqr;
                 closestReachable = node;
             }
+        }
+
+        // Si ya estamos prácticamente sobre un nodo (ej. posición de spawn), ese es el nodo exacto
+        if (closestFallback != null && minFallbackDistSqr <= 1.0f)
+        {
+            return closestFallback;
         }
 
         return closestReachable != null ? closestReachable : closestFallback;

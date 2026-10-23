@@ -21,9 +21,35 @@ public static class PreyDistribution
         if (validNodes.Count == 0) return;
 
         int preyCount = preyList.Count;
+        List<EnemyAI> leaders = new List<EnemyAI>();
+        List<EnemyAI> followers = new List<EnemyAI>();
+
+        for (int i = 0; i < preyCount; i++)
+        {
+            EnemyAI prey = preyList[i];
+            if (prey == null) continue;
+
+            if (prey.LeaderAI != null && prey.LeaderAI != prey)
+            {
+                followers.Add(prey);
+            }
+            else
+            {
+                leaders.Add(prey);
+            }
+        }
+
+        // Si no hay líderes explícitos, tratar a todos como líderes individuales
+        if (leaders.Count == 0)
+        {
+            leaders.AddRange(followers);
+            followers.Clear();
+        }
+
+        int leaderCount = leaders.Count;
         List<Node> chosenNodes = new List<Node> { validNodes[0] };
 
-        while (chosenNodes.Count < preyCount && chosenNodes.Count < validNodes.Count)
+        while (chosenNodes.Count < leaderCount && chosenNodes.Count < validNodes.Count)
         {
             Node bestCandidate = null;
             float maxMinDist = -1f;
@@ -54,42 +80,73 @@ public static class PreyDistribution
             else break;
         }
 
-        for (int i = 0; i < preyCount; i++)
+        // Posicionar a los líderes en los nodos elegidos distribuidos por el mapa
+        for (int i = 0; i < leaderCount; i++)
         {
-            EnemyAI prey = preyList[i];
-            if (prey == null) continue;
+            EnemyAI leader = leaders[i];
+            if (leader == null) continue;
 
             Node targetNode = chosenNodes[i % chosenNodes.Count];
             Vector3 spawnPos = targetNode.transform.position;
-            prey.transform.position = spawnPos;
+            leader.transform.position = spawnPos;
 
-            if (prey.Movement != null)
+            if (leader.Movement != null)
             {
-                prey.Movement.SnapToGround(true);
+                leader.Movement.SnapToGround(true);
             }
 
             if (targetNode.neighbors != null && targetNode.neighbors.Count > 0 && targetNode.neighbors[0] != null)
             {
-                Vector3 fwd = targetNode.neighbors[0].transform.position - prey.transform.position;
+                Vector3 fwd = targetNode.neighbors[0].transform.position - leader.transform.position;
                 fwd.y = 0;
                 if (fwd.sqrMagnitude > 0.001f)
                 {
-                    prey.transform.rotation = Quaternion.LookRotation(fwd.normalized, Vector3.up);
+                    leader.transform.rotation = Quaternion.LookRotation(fwd.normalized, Vector3.up);
                 }
             }
 
-            if (prey.Movement != null)
+            if (leader.Movement != null)
             {
-                prey.Movement.patrolNodes.Clear();
-                prey.Movement.ClearPath();
-                prey.Movement.ResetVelocity();
-                prey.Movement.SetCurrentDestinationNode(targetNode);
+                leader.Movement.patrolNodes.Clear();
+                leader.Movement.ClearPath();
+                leader.Movement.ResetVelocity();
+                leader.Movement.SetCurrentDestinationNode(targetNode);
 
-                Node nextPatrol = prey.Movement.GetNextNetworkPatrolNode();
+                Node nextPatrol = leader.Movement.GetNextNetworkPatrolNode();
                 if (nextPatrol != null)
                 {
-                    prey.Movement.MoveTo(nextPatrol.transform.position);
+                    leader.Movement.MoveTo(nextPatrol.transform.position);
                 }
+            }
+        }
+
+        // Posicionar a los seguidores inmediatamente detrás de su líder en formación
+        for (int i = 0; i < followers.Count; i++)
+        {
+            EnemyAI follower = followers[i];
+            if (follower == null || follower.LeaderAI == null) continue;
+
+            EnemyAI leader = follower.LeaderAI;
+            int slotIndex = leader.packFollowers.IndexOf(follower);
+            if (slotIndex < 0) slotIndex = i;
+
+            int row = (slotIndex / 2) + 1;
+            float side = (slotIndex % 2 == 0) ? -1f : 1f;
+
+            Vector3 leaderPos = leader.transform.position;
+            Vector3 leaderFwd = leader.transform.forward;
+            Vector3 leaderRight = leader.transform.right;
+
+            Vector3 spawnPos = leaderPos - (leaderFwd * (1.6f * row)) + (leaderRight * (side * 0.9f));
+            follower.transform.position = spawnPos;
+            follower.transform.rotation = leader.transform.rotation;
+
+            if (follower.Movement != null)
+            {
+                follower.Movement.SnapToGround(true);
+                follower.Movement.patrolNodes.Clear();
+                follower.Movement.ClearPath();
+                follower.Movement.ResetVelocity();
             }
         }
     }

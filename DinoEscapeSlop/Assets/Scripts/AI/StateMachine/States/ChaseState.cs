@@ -39,6 +39,13 @@ public class ChaseState : IState
     {
         if (ai.TargetDino != null)
         {
+            // Los dinosaurios ciegos no atacan a los pequeños
+            if (ai is BlindEnemyAI || (ai.TargetDino.IsSmallDino && ai is BlindEnemyAI))
+            {
+                EndChase();
+                return;
+            }
+
             if (ai.CanSeePlayer())
             {
                 ai.TriggerAttack(ai.Player);

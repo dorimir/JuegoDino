@@ -17,7 +17,9 @@ public class EnemyAI : MonoBehaviour
     public List<EnemyAI> packFollowers = new List<EnemyAI>();
     public EnemyAI LeaderAI { get; protected set; }
 
-    public EnemyAI EffectiveLeader => (LeaderAI != null && LeaderAI.gameObject.activeInHierarchy) ? LeaderAI : this;
+    public EnemyAI EffectiveLeader => (IsSmallDino && LeaderAI != null && LeaderAI.gameObject.activeInHierarchy) ? LeaderAI : this;
+    public Vector3 SpawnPosition => (Movement != null) ? Movement.SpawnPosition : transform.position;
+    public Quaternion SpawnRotation => (Movement != null) ? Movement.SpawnRotation : transform.rotation;
 
     [Header("Configuración de Presa / Depredador")]
     [HideInInspector] public bool dinoCiego = false;
@@ -136,7 +138,7 @@ public class EnemyAI : MonoBehaviour
         if (goName.Contains("presa")) { IsPrey = true; return; }
         if (goName.Contains("ciego") || goName.Contains("blind")) { IsPrey = false; return; }
         if (goName.Contains("lider") && !goName.Contains("presa")) { IsPrey = false; return; }
-        if (goName.Contains("sumiso") || goName.Contains("depredador") || goName.Contains("predator")) { IsPrey = false; return; }
+        if ((goName.Contains("seguidor") && !goName.Contains("presa")) || goName.Contains("sumiso") || goName.Contains("depredador") || goName.Contains("predator")) { IsPrey = false; return; }
 
         // Si ya fue configurado en el Inspector (como los prefabs o instancias de escena con IsPrey = true), respetarlo
         if (IsPrey) return;
@@ -144,14 +146,37 @@ public class EnemyAI : MonoBehaviour
         // Fallback: los depredadores tienen escala ~2.08 o 3.0, las presas son pequeñas ~0.9 - 1.0
         float scale = Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z);
         IsPrey = (scale < 1.5f);
+
+        if (!IsPrey)
+        {
+            isLeader = false;
+            leaderTransform = null;
+            LeaderAI = null;
+            packFollowers.Clear();
+        }
     }
 
     protected virtual void SetupDefaultStats()
     {
-        isLeader = false;
-        leaderTransform = null;
-        LeaderAI = null;
-        packFollowers.Clear();
+        if (!IsSmallDino)
+        {
+            isLeader = false;
+            leaderTransform = null;
+            LeaderAI = null;
+            packFollowers.Clear();
+        }
+        else
+        {
+            if (leaderTransform != null && LeaderAI == null)
+            {
+                LeaderAI = leaderTransform.GetComponent<EnemyAI>();
+            }
+            else if (isLeader)
+            {
+                LeaderAI = null;
+            }
+            packFollowers.Clear();
+        }
 
         if (IsSmallDino)
         {
@@ -163,6 +188,7 @@ public class EnemyAI : MonoBehaviour
             patrolSpeed = 5.2f;
             chaseSpeed = 9.8f;
             fleeSpeed = 13.0f;
+            SafeRange = 12.0f;
         }
         else
         {
@@ -173,6 +199,7 @@ public class EnemyAI : MonoBehaviour
             patrolSpeed = 2.4f;
             chaseSpeed = 7.5f;
             fleeSpeed = 8.0f;
+            SafeRange = 16.0f;
         }
     }
 
@@ -205,9 +232,11 @@ public class EnemyAI : MonoBehaviour
             PatrolState = predPatrol;
             ChaseState = predChase;
             FleeState = flee;
+            FollowLeaderState = null;
 
             StateMachine.AllowState(predPatrol);
             StateMachine.AllowState(predChase);
+            StateMachine.AllowState(flee);
         }
     }
 
@@ -215,21 +244,36 @@ public class EnemyAI : MonoBehaviour
     {
         EnsurePlayerReference();
 
-        isLeader = false;
-        leaderTransform = null;
-        LeaderAI = null;
-        packFollowers.Clear();
-
-        if (IsPrey && !hasDistributedPrey)
+        if (IsSmallDino)
         {
-            hasDistributedPrey = true;
-            PreyDistribution.DistributePreyAcrossMap(AllPrey);
+            if (leaderTransform != null)
+            {
+                LeaderAI = leaderTransform.GetComponent<EnemyAI>();
+                if (LeaderAI != null)
+                {
+                    isLeader = false;
+                    if (!LeaderAI.packFollowers.Contains(this))
+                    {
+                        LeaderAI.packFollowers.Add(this);
+                    }
+                }
+            }
+            else if (isLeader)
+            {
+                LeaderAI = null;
+            }
+        }
+        else
+        {
+            isLeader = false;
+            leaderTransform = null;
+            LeaderAI = null;
+            packFollowers.Clear();
         }
 
         if (Movement != null)
         {
             Movement.speed = patrolSpeed;
-            Movement.SnapToGround(true);
         }
 
         SetVisualState(DinoVisualState.Normal);
@@ -338,6 +382,7 @@ public class EnemyAI : MonoBehaviour
 
     public void SetLeader(EnemyAI newLeader)
     {
+        if (!IsSmallDino) return;
         if (newLeader == null || newLeader == this)
         {
             PromoteToLeader();
@@ -363,6 +408,7 @@ public class EnemyAI : MonoBehaviour
 
     public void PromoteToLeader()
     {
+        if (!IsSmallDino) return;
         if (LeaderAI != null) LeaderAI.packFollowers.Remove(this);
 
         LeaderAI = null;
@@ -407,12 +453,21 @@ public class EnemyAI : MonoBehaviour
     public virtual void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
         if (target == null) return;
+        if (this is BlindEnemyAI)
+        {
+            if (targetDino != null && targetDino.IsSmallDino) return;
+            if (target.GetComponentInParent<EnemyAI>()?.IsSmallDino == true) return;
+        }
+
         CurrentChaseTarget = target;
         TargetDino = targetDino;
 
         if (targetDino != null && targetDino.gameObject.activeInHierarchy)
         {
-            targetDino.NotifyPackFlee(this);
+            if (!(this is BlindEnemyAI))
+            {
+                targetDino.NotifyPackFlee(this);
+            }
         }
 
         if (StateMachine != null && ChaseState != null)
@@ -424,7 +479,13 @@ public class EnemyAI : MonoBehaviour
 
     public virtual void TriggerFlee(EnemyAI threat)
     {
-        if (threat == null) return;
+        // Los dinosaurios grandes son depredadores dominantes y nunca huyen de otros dinosaurios
+        if (IsBigDino) return;
+        if (threat == null || threat == this) return;
+        if (threat is BlindEnemyAI) return; // Los pequeños no huyen de los ciegos
+        if (threat == LeaderAI || threat.EffectiveLeader == EffectiveLeader) return;
+        if (threat.IsPrey || threat is SmallEnemyAI) return;
+
         CurrentThreat = threat.transform;
         ChasingPredator = threat;
         SpottedThreatPosition = threat.transform.position;
@@ -473,7 +534,21 @@ public class EnemyAI : MonoBehaviour
         // Si es dinosaurio pequeño / presa, alertar a la manada
         if (IsSmallDino)
         {
-            NotifyPackFlee(null);
+            if (packFollowers != null)
+            {
+                for (int i = 0; i < packFollowers.Count; i++)
+                {
+                    EnemyAI follower = packFollowers[i];
+                    if (follower != null && follower.gameObject.activeInHierarchy && follower != this)
+                    {
+                        follower.TriggerScaredByLight(threat);
+                    }
+                }
+            }
+            if (LeaderAI != null && LeaderAI.gameObject.activeInHierarchy && LeaderAI != this)
+            {
+                LeaderAI.TriggerScaredByLight(threat);
+            }
         }
     }
 
@@ -501,6 +576,8 @@ public class EnemyAI : MonoBehaviour
     {
         TriggerAttack(target);
 
+        if (!IsSmallDino) return;
+
         if (!isLeader && LeaderAI != null && LeaderAI.gameObject.activeInHierarchy)
         {
             if (LeaderAI.StateMachine != null && LeaderAI.StateMachine.CurrentState != LeaderAI.ChaseState)
@@ -527,7 +604,14 @@ public class EnemyAI : MonoBehaviour
 
     public void NotifyPackFlee(EnemyAI threat)
     {
+        if (threat == null || threat == this) return;
+        if (threat is BlindEnemyAI) return; // Los pequeños no huyen de los ciegos
+        if (threat == LeaderAI || threat.EffectiveLeader == EffectiveLeader) return;
+        if (threat.IsPrey || threat is SmallEnemyAI) return;
+
         TriggerFlee(threat);
+
+        if (!IsSmallDino) return;
 
         if (!isLeader && LeaderAI != null && LeaderAI.gameObject.activeInHierarchy)
         {
@@ -553,11 +637,19 @@ public class EnemyAI : MonoBehaviour
 
     public void NotifyPackFlee(Transform threat, EnemyAI predator = null)
     {
-        if (predator != null) NotifyPackFlee(predator);
+        if (predator != null)
+        {
+            if (predator is BlindEnemyAI) return;
+            NotifyPackFlee(predator);
+        }
         else if (threat != null)
         {
-            EnemyAI threatAI = threat.GetComponent<EnemyAI>();
-            if (threatAI != null) NotifyPackFlee(threatAI);
+            EnemyAI threatAI = threat.GetComponentInParent<EnemyAI>();
+            if (threatAI != null)
+            {
+                if (threatAI is BlindEnemyAI) return;
+                NotifyPackFlee(threatAI);
+            }
         }
     }
 
@@ -621,6 +713,8 @@ public class EnemyAI : MonoBehaviour
         {
             EnemyAI predator = AllPredators[i];
             if (predator == null || !predator.gameObject.activeInHierarchy || predator == this) continue;
+            if (predator == LeaderAI || predator.EffectiveLeader == EffectiveLeader) continue;
+            if (predator.IsPrey || predator is SmallEnemyAI || predator is BlindEnemyAI) continue;
 
             if (CanSeeSpecificDino(predator))
             {
@@ -641,6 +735,8 @@ public class EnemyAI : MonoBehaviour
         {
             EnemyAI prey = AllPrey[i];
             if (prey == null || !prey.gameObject.activeInHierarchy || prey == this) continue;
+            if (prey == LeaderAI || prey.EffectiveLeader == EffectiveLeader) continue;
+            if (!prey.IsPrey && !(prey is SmallEnemyAI)) continue;
 
             if (CanSeeSpecificDino(prey))
             {

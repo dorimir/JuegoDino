@@ -40,6 +40,28 @@ public class FleeState : IState
         triggeringPredator = ai.ChasingPredator;
         triggeringThreat = (triggeringPredator != null) ? triggeringPredator.transform : ai.CurrentThreat;
 
+        if (triggeringPredator != null)
+        {
+            if (triggeringPredator == ai || triggeringPredator == ai.LeaderAI ||
+                triggeringPredator.EffectiveLeader == ai.EffectiveLeader ||
+                triggeringPredator.IsPrey || triggeringPredator is SmallEnemyAI ||
+                (ai.IsSmallDino && triggeringPredator is BlindEnemyAI))
+            {
+                ai.TriggerPatrol();
+                return;
+            }
+        }
+
+        if (triggeringThreat != null && ai.IsSmallDino)
+        {
+            EnemyAI threatAI = triggeringThreat.GetComponentInParent<EnemyAI>();
+            if (threatAI != null && threatAI is BlindEnemyAI)
+            {
+                ai.TriggerPatrol();
+                return;
+            }
+        }
+
         if (triggeringThreat != null && triggeringThreat.gameObject.activeInHierarchy)
         {
             lastKnownThreatPos = triggeringThreat.position;
@@ -66,7 +88,7 @@ public class FleeState : IState
 
     public void Update()
     {
-        if (ai.CanSeeBigDino(out EnemyAI visiblePredator))
+        if (ai.CanSeeBigDino(out EnemyAI visiblePredator) && !(ai.IsSmallDino && visiblePredator is BlindEnemyAI))
         {
             triggeringPredator = visiblePredator;
             triggeringThreat = visiblePredator.transform;
@@ -79,8 +101,28 @@ public class FleeState : IState
         float distToThreat = Vector3.Distance(myPos, threatPos);
         bool threatActive = HasActiveThreat();
 
-        float safeDistance = (ai.SafeRange > 0f) ? ai.SafeRange : 22f;
-        bool isThreatTooClose = threatActive && (distToThreat < safeDistance);
+        float safeDistance = (ai.SafeRange > 0f) ? ai.SafeRange : (ai.IsSmallDino ? 12f : 16f);
+
+        bool threatDirectlyVisible = false;
+        bool threatActivelyChasingMe = false;
+
+        if (triggeringPredator != null && triggeringPredator.gameObject.activeInHierarchy)
+        {
+            threatDirectlyVisible = ai.CanSeeSpecificDino(triggeringPredator);
+            threatActivelyChasingMe = (triggeringPredator.TargetDino == ai || triggeringPredator.CurrentChaseTarget == ai.transform);
+        }
+        else if (ai.ChasingPredator != null && ai.ChasingPredator.gameObject.activeInHierarchy)
+        {
+            threatDirectlyVisible = ai.CanSeeSpecificDino(ai.ChasingPredator);
+            threatActivelyChasingMe = (ai.ChasingPredator.TargetDino == ai || ai.ChasingPredator.CurrentChaseTarget == ai.transform);
+        }
+        else if (ai.Player != null && (triggeringThreat == ai.Player || triggeringThreat == ai.Player.transform))
+        {
+            threatDirectlyVisible = ai.CanSeePlayer();
+            threatActivelyChasingMe = false;
+        }
+
+        bool isThreatTooClose = threatActive && (distToThreat < 4.5f || threatActivelyChasingMe || (threatDirectlyVisible && distToThreat < safeDistance));
 
         if (isThreatTooClose)
         {
@@ -479,6 +521,13 @@ public class FleeState : IState
 
     private bool HasActiveThreat()
     {
+        if (ai.IsSmallDino)
+        {
+            if (triggeringPredator is BlindEnemyAI || ai.ChasingPredator is BlindEnemyAI) return false;
+            if (triggeringThreat != null && triggeringThreat.GetComponentInParent<BlindEnemyAI>() != null) return false;
+            if (ai.CurrentThreat != null && ai.CurrentThreat.GetComponentInParent<BlindEnemyAI>() != null) return false;
+        }
+
         if (triggeringPredator != null && triggeringPredator.gameObject.activeInHierarchy) return true;
         if (triggeringThreat != null && triggeringThreat.gameObject.activeInHierarchy) return true;
         if (ai.ChasingPredator != null && ai.ChasingPredator.gameObject.activeInHierarchy) return true;

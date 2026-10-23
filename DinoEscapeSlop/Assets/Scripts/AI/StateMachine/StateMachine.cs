@@ -5,7 +5,9 @@ public class StateMachine
 {
     public IState CurrentState { get; private set; }
 
-    private List<IState> allowedStates = new List<IState>();
+    private readonly List<IState> allowedStates = new List<IState>();
+
+    public IReadOnlyList<IState> AllowedStates => allowedStates;
 
     public void AllowState(IState state)
     {
@@ -13,6 +15,11 @@ public class StateMachine
         {
             allowedStates.Add(state);
         }
+    }
+
+    public bool IsStateAllowed(IState state)
+    {
+        return state != null && allowedStates.Contains(state);
     }
 
     public void Initialize(IState startingState)
@@ -25,19 +32,21 @@ public class StateMachine
         CurrentState.Enter();
     }
 
-    public void ChangeState(IState newState)
+    public bool ChangeState(IState newState)
     {
-        if (newState == null || newState == CurrentState) return;
+        if (newState == null || newState == CurrentState) return false;
 
-        // Si no estaba registrado previamente, lo registra automáticamente para no bloquear la transición
-        if (!allowedStates.Contains(newState))
+        // Validación estricta: Solo se puede transicionar a estados previamente autorizados para esta entidad
+        if (allowedStates.Count > 0 && !allowedStates.Contains(newState))
         {
-            allowedStates.Add(newState);
+            Debug.LogWarning($"[StateMachine] Transición denegada: El estado {newState.GetType().Name} no está permitido en esta entidad.");
+            return false;
         }
 
         CurrentState?.Exit();
         CurrentState = newState;
         CurrentState.Enter();
+        return true;
     }
 
     public void Update()

@@ -36,7 +36,7 @@ public class PatrolState : IState
     {
         if (ai.IsSmallDino)
         {
-            if (ai.CanSeeBigDino(out EnemyAI bigDino))
+            if (ai.CanSeeBigDino(out EnemyAI bigDino) && !(bigDino is BlindEnemyAI))
             {
                 ai.NotifyPackFlee(bigDino);
                 return true;

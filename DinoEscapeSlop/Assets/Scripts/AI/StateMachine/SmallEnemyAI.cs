@@ -16,9 +16,14 @@ public class SmallEnemyAI : EnemyAI
     protected override void SetupDefaultStats()
     {
         IsPrey = true;
-        isLeader = false;
-        leaderTransform = null;
-        LeaderAI = null;
+        if (leaderTransform != null && LeaderAI == null)
+        {
+            LeaderAI = leaderTransform.GetComponent<EnemyAI>();
+        }
+        else if (isLeader)
+        {
+            LeaderAI = null;
+        }
         packFollowers.Clear();
 
         // Visión periférica amplia típica de dinosaurios pequeños/presas
@@ -32,7 +37,7 @@ public class SmallEnemyAI : EnemyAI
         patrolSpeed = 5.2f;
         chaseSpeed = 9.8f;
         fleeSpeed = 13.0f;
-        SafeRange = 22f;
+        SafeRange = 12.0f;
 
         // Tiempos de persecución y desiste
         preyMaxChaseTime = 3.5f;
@@ -71,10 +76,21 @@ public class SmallEnemyAI : EnemyAI
     {
         EnsurePlayerReference();
 
-        if (!hasDistributedPrey)
+        if (leaderTransform != null)
         {
-            hasDistributedPrey = true;
-            PreyDistribution.DistributePreyAcrossMap(AllPrey);
+            LeaderAI = leaderTransform.GetComponent<EnemyAI>();
+            if (LeaderAI != null)
+            {
+                isLeader = false;
+                if (!LeaderAI.packFollowers.Contains(this))
+                {
+                    LeaderAI.packFollowers.Add(this);
+                }
+            }
+        }
+        else if (isLeader)
+        {
+            LeaderAI = null;
         }
 
         if (Movement != null)
@@ -109,7 +125,11 @@ public class SmallEnemyAI : EnemyAI
 
     public override void TriggerFlee(EnemyAI threat)
     {
-        if (threat == null) return;
+        if (threat == null || threat == this) return;
+        if (threat is BlindEnemyAI) return; // Los pequeños no huyen de los ciegos
+        if (threat == LeaderAI || threat.EffectiveLeader == EffectiveLeader) return;
+        if (threat.IsPrey || threat is SmallEnemyAI) return;
+
         CurrentThreat = threat.transform;
         ChasingPredator = threat;
         SpottedThreatPosition = threat.transform.position;
