@@ -1,4 +1,3 @@
-
 using UnityEngine;
 
 public class DinoSordo : MonoBehaviour
@@ -7,33 +6,16 @@ public class DinoSordo : MonoBehaviour
     public Collider colliderOido;
     public float cooldown = 3f;
 
-    [Header("Color")]
-    public Color colorOido = new Color(0.6f, 0.1f, 0.9f);
-
     private EnemyAI ai;
-    private Renderer[] renderers;
     private float proximoPermitido;
-
-    private static readonly int BaseColorId =
-        Shader.PropertyToID("_BaseColor");
-
-    private static readonly int ColorId =
-        Shader.PropertyToID("_Color");
 
     private void Awake()
     {
         ai = GetComponent<EnemyAI>();
-
-        if (ai == null)
-            ai = GetComponentInParent<EnemyAI>();
+        if (ai == null) ai = GetComponentInParent<EnemyAI>();
 
         if (colliderOido == null)
             colliderOido = GetComponentInChildren<Collider>();
-
-        renderers = GetComponentsInChildren<Renderer>(true);
-
-        if (colliderOido != null)
-            colliderOido.isTrigger = true;
 
         Debug.Log("[SORDO] " + name +
                   " | EnemyAI: " + (ai != null) +
@@ -42,103 +24,63 @@ public class DinoSordo : MonoBehaviour
 
     private void Update()
     {
-        if (ai == null || EnemyAI.GlobalPlayerDead)
+        if (ai == null || colliderOido == null || EnemyAI.GlobalPlayerDead)
+            return;
+        if (ai.StateMachine == null || ai.ChaseState == null)
             return;
 
+        if (OyeObjeto() || OyePasos() || VeLuz())
+            Reaccionar();
+    }
+
+    // Ruido del objeto sonoro (solo si está en la mano o en vuelo)
+    private bool OyeObjeto()
+    {
         foreach (RastreoSonoro fuente in RastreoSonoro.Activos)
         {
-            if (fuente == null || !fuente.Recogido)
-                continue;
+            if (fuente == null || !fuente.Recogido) continue;
 
-            float distancia = Vector3.Distance(
-                colliderOido.bounds.ClosestPoint(fuente.transform.position),
-                fuente.transform.position
-            );
-
-            if (distancia <= fuente.radioSonoro)
-            {
-                // Simular la detección del objeto.
-                DetectarObjeto(fuente.GetComponent<Collider>());
-                break;
-            }
+            if (Distancia(fuente.transform.position) <= fuente.radioSonoro)
+                return true;
         }
+        return false;
     }
 
-
-    private void OnTriggerEnter(Collider other)
+    // Ruido de los pasos / saltos del jugador (no suena en sigilo ni quieto)
+    private bool OyePasos()
     {
-        DetectarObjeto(other);
+        RuidoJugador pasos = RuidoJugador.Instancia;
+        if (pasos == null || !pasos.Sonando) return false;
+
+        return Distancia(pasos.transform.position) <= pasos.RadioActual;
     }
 
-    private void OnTriggerStay(Collider other)
+    private float Distancia(Vector3 pos)
     {
-        DetectarObjeto(other);
+        Vector3 cercano = colliderOido.bounds.ClosestPoint(pos);
+        return Vector3.Distance(cercano, pos);
     }
 
-    
-    private void DetectarObjeto(Collider other)
+    private void Reaccionar()
     {
-        if (ai == null || colliderOido == null ||
-            EnemyAI.GlobalPlayerDead)
-            return;
-
-        if (ai.IsPrey || ai.StateMachine == null ||
-            ai.ChaseState == null)
-            return;
-
-        if (other == null) return;
-
-        RastreoSonoro fuente = other.GetComponent<RastreoSonoro>();
-
-        if (fuente == null)
-            fuente = other.GetComponentInParent<RastreoSonoro>();
-
-        if (fuente == null || !fuente.Recogido)
-            return;
-
-        Vector3 puntoCercano =
-            colliderOido.ClosestPoint(fuente.transform.position);
-
-        float distancia = Vector3.Distance(
-            puntoCercano,
-            fuente.transform.position
-        );
-
-        // Respetar el radio de sonido del objeto.
-        if (distancia > fuente.radioSonoro)
-            return;
-
-        PintarMorado();
-
-        if (ai.StateMachine.CurrentState == ai.ChaseState)
-            return;
-
-        if (Time.time < proximoPermitido)
-            return;
+        if (ai.StateMachine.CurrentState == ai.ChaseState) return;
+        if (Time.time < proximoPermitido) return;
 
         ai.EnsurePlayerReference();
-
-        if (ai.Player == null)
-            return;
+        if (ai.Player == null) return;
 
         proximoPermitido = Time.time + cooldown;
+        Debug.Log(name + " oye un ruido -> CHASE");
         ai.TriggerAttack(ai.Player);
     }
 
-
-    private void PintarMorado()
+    private bool VeLuz()
     {
-        foreach (Renderer r in renderers)
+        foreach (Linterna l in Linterna.Encendidas)
         {
-            if (r == null) continue;
-
-            Material m = r.material;
-
-            if (m.HasProperty(BaseColorId))
-                m.SetColor(BaseColorId, colorOido);
-
-            if (m.HasProperty(ColorId))
-                m.SetColor(ColorId, colorOido);
+            if (l != null && l.Ilumina(colliderOido))
+                return true;
         }
+        return false;
     }
 }
