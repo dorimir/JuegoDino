@@ -333,8 +333,10 @@ public class EnemyAI : MonoBehaviour
         {
             visionRange = 2.5f;
             visionAngle = 359f;
-            DetectionRange = 2f;
-            LoseRange = 3f;
+            DetectionRange = 3f;
+            LoseRange = 8f;
+            chaseSpeed = 6f;
+            fleeSpeed = 8.0f;
         }
 
         StateMachine = new StateMachine();

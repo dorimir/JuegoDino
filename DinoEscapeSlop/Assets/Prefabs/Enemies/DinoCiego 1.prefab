@@ -18,7 +18,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &7848704239516522583
 Transform:
   m_ObjectHideFlags: 0
@@ -234,10 +234,10 @@ MonoBehaviour:
   visionAngle: 359
   eyeHeight: 0.65
   DetectionRange: 3
-  LoseRange: 4
+  LoseRange: 8
   AttackRange: 2.5
   patrolSpeed: 2.4
-  chaseSpeed: 7.8
+  chaseSpeed: 5
   fleeSpeed: 10.5
   preyMaxChaseTime: 3.5
   preyLostSightTime: 2
@@ -307,7 +307,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::DinoSordo
   colliderOido: {fileID: 4682040814898576038}
   cooldown: 3
-  colorOido: {r: 0.6, g: 0.1, b: 0.9, a: 1}
 --- !u!114 &1905608394709846998
 MonoBehaviour:
   m_ObjectHideFlags: 0

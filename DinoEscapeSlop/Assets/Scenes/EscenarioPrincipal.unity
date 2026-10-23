@@ -16489,6 +16489,28 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 1350108946}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1369910974 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 5241267463746980526, guid: f2e0b7ae4dae8cf44955bccd3512b213,
+    type: 3}
+  m_PrefabInstance: {fileID: 1638260508}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1369910975
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1369910974}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: b8bcf3d1e4e447341b8e5461e0b06b46, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::RuidoJugador
+  radioCaminar: 6
+  radioCorrer: 14
+  radioSalto: 10
+  velocidadMinima: 0.3
 --- !u!1001 &1384541871
 PrefabInstance:
   m_ObjectHideFlags: 0
@@ -20739,6 +20761,10 @@ PrefabInstance:
       insertIndex: -1
       addedObject: {fileID: 459619172}
     m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 5241267463746980526, guid: f2e0b7ae4dae8cf44955bccd3512b213,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1369910975}
     - targetCorrespondingSourceObject: {fileID: 5242010300582068122, guid: f2e0b7ae4dae8cf44955bccd3512b213,
         type: 3}
       insertIndex: -1
@@ -28016,6 +28042,26 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 9189315817889740933, guid: 0414d4207c420e645858a3918af46537,
+        type: 3}
+      propertyPath: LoseRange
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 9189315817889740933, guid: 0414d4207c420e645858a3918af46537,
+        type: 3}
+      propertyPath: fleeSpeed
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9189315817889740933, guid: 0414d4207c420e645858a3918af46537,
+        type: 3}
+      propertyPath: chaseSpeed
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 9189315817889740933, guid: 0414d4207c420e645858a3918af46537,
+        type: 3}
+      propertyPath: DetectionRange
+      value: 10
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -28029,6 +28075,11 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 0}
     m_Modifications:
+    - target: {fileID: 1364901147920736492, guid: ca8051cfdf5ec4843b3ea7cbda19bbb2,
+        type: 3}
+      propertyPath: m_Enabled
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 2854839825856527220, guid: ca8051cfdf5ec4843b3ea7cbda19bbb2,
         type: 3}
       propertyPath: m_LocalPosition.x
