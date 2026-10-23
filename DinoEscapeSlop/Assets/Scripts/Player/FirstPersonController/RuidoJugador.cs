@@ -19,7 +19,6 @@ public class RuidoJugador : MonoBehaviour
 
     private FirstPersonMovement mov;
     private Rigidbody rb;
-    private bool anterior;
 
     private void Awake()
     {
@@ -30,7 +29,8 @@ public class RuidoJugador : MonoBehaviour
 
     private void OnDestroy()
     {
-        if (Instancia == this) Instancia = null;
+        if (Instancia == this)
+            Instancia = null;
     }
 
     private void Update()
@@ -38,8 +38,9 @@ public class RuidoJugador : MonoBehaviour
         Sonando = false;
         RadioActual = 0f;
 
-        // En sigilo (Shift) no hace ruido
-        if (mov.IsCrouched) { Log(); return; }
+        // En sigilo (Shift) no hace ruido.
+        if (mov.IsCrouched)
+            return;
 
         Vector3 v = rb != null ? rb.linearVelocity : Vector3.zero;
         float velHoriz = new Vector2(v.x, v.z).magnitude;
@@ -57,13 +58,13 @@ public class RuidoJugador : MonoBehaviour
             Sonando = true;
             RadioActual = mov.IsRunning ? radioCorrer : radioCaminar;
         }
-
-        Log();
     }
 
     private void OnDrawGizmosSelected()
     {
-        if (!Sonando) return;
+        if (!Sonando)
+            return;
+
         Gizmos.color = new Color(0f, 1f, 0.5f, 0.6f);
         Gizmos.DrawWireSphere(transform.position, RadioActual);
     }
