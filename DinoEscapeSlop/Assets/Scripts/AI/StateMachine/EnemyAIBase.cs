@@ -329,7 +329,7 @@ public class EnemyAI : MonoBehaviour
             chaseSpeed = 7.5f;
             fleeSpeed = 8.0f;
         }
-        if (dinoCiego) //VALORES PARA DINO CIEGO
+        if (dinoCiego) //VALORES PERSONALES PARA DINO CIEGO
         {
             visionRange = 2.5f;
             visionAngle = 359f;
