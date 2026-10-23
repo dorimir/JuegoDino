@@ -29,7 +29,7 @@ public class DinoSordo : MonoBehaviour
         if (ai.StateMachine == null || ai.ChaseState == null)
             return;
 
-        if (OyeObjeto() || OyePasos())
+        if (OyeObjeto() || OyePasos() || VeLuz())
             Reaccionar();
     }
 
@@ -72,5 +72,15 @@ public class DinoSordo : MonoBehaviour
         proximoPermitido = Time.time + cooldown;
         Debug.Log(name + " oye un ruido -> CHASE");
         ai.TriggerAttack(ai.Player);
+    }
+
+    private bool VeLuz()
+    {
+        foreach (Linterna l in Linterna.Encendidas)
+        {
+            if (l != null && l.Ilumina(colliderOido))
+                return true;
+        }
+        return false;
     }
 }

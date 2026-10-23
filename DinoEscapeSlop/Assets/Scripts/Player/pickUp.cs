@@ -23,6 +23,7 @@ public class PickUpScript : MonoBehaviour
 
     private GameObject heldObj;
     private Rigidbody heldObjRb;
+    private Linterna heldLinterna;
 
     private Transform[] heldTransforms;
     private int[] originalLayers;
@@ -51,7 +52,8 @@ public class PickUpScript : MonoBehaviour
         if (heldObj == null)
             return;
 
-        if (Input.GetKey(KeyCode.R))
+        // La linterna no se rota a mano
+        if (heldLinterna == null && Input.GetKey(KeyCode.R))
         {
             float x = Input.GetAxis("Mouse X") * rotationSensitivity;
             float y = Input.GetAxis("Mouse Y") * rotationSensitivity;
@@ -87,7 +89,10 @@ public class PickUpScript : MonoBehaviour
 
         t.position = pos;
 
-        Quaternion targetRot = holdPos.rotation * localRotation;
+        Quaternion targetRot = heldLinterna != null
+            ? heldLinterna.RotacionEnMano(holdPos.rotation)
+            : holdPos.rotation * localRotation;
+
         float k = 1f - Mathf.Exp(-rotationSmoothness * Time.deltaTime);
         t.rotation = Quaternion.Slerp(t.rotation, targetRot, k);
     }
@@ -115,18 +120,13 @@ public class PickUpScript : MonoBehaviour
         heldObj = obj;
         heldObjRb = rb;
 
+        heldLinterna = obj.GetComponentInChildren<Linterna>();
+        if (heldLinterna == null) heldLinterna = obj.GetComponentInParent<Linterna>();
+
         RastreoSonoro rs = obj.GetComponentInChildren<RastreoSonoro>();
         if (rs == null) rs = obj.GetComponentInParent<RastreoSonoro>();
-
         if (rs != null)
-        {
             rs.Recoger();
-            Debug.Log("[PICKUP] Recoger() llamado en " + rs.name);
-        }
-        else
-        {
-            Debug.LogError("[PICKUP] " + obj.name + " NO tiene RastreoSonoro");
-        }
 
         originalKinematic = rb.isKinematic;
         originalDetectCollisions = rb.detectCollisions;
@@ -166,17 +166,15 @@ public class PickUpScript : MonoBehaviour
 
         RastreoSonoro rs = heldObj.GetComponentInChildren<RastreoSonoro>();
         if (rs == null) rs = heldObj.GetComponentInParent<RastreoSonoro>();
-
         if (rs != null)
         {
             if (lanzado) rs.Lanzar();
             else rs.Soltar();
-
-            Debug.Log("[PICKUP] " + (lanzado ? "Lanzar()" : "Soltar()") + " llamado en " + rs.name);
         }
 
         heldObj = null;
         heldObjRb = null;
+        heldLinterna = null;
         heldTransforms = null;
         originalLayers = null;
     }
