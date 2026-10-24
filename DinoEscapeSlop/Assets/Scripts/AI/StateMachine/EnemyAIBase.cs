@@ -25,6 +25,30 @@ public class EnemyAI : MonoBehaviour
     [Header("Dinosaurio ciego")]
     public bool dinoCiego = false;
 
+    [Header("Dinosaurio emboscador")]
+    [Tooltip("Espera quieto en su sitio, acecha y se lanza en una carrera corta.")]
+    public bool dinoEmboscador = false;
+    [Tooltip("Distancia a la que detecta al jugador y empieza a acechar.")]
+    public float ambushStalkRange = 9f;
+    [Tooltip("Distancia a la que, tras el aviso, se lanza al ataque.")]
+    public float ambushTriggerRange = 5f;
+    [Tooltip("Segundos de aviso (acecho) antes de atacar.")]
+    public float ambushWarningTime = 1.2f;
+    [Tooltip("Duración máxima de la carrera de ataque.")]
+    public float ambushAttackDuration = 2f;
+    [Tooltip("Velocidad de la carrera de ataque.")]
+    public float ambushAttackSpeed = 11f;
+    [Tooltip("Giro máximo durante el ataque (grados/s). Bajo = esquivable.")]
+    public float ambushTurnRate = 90f;
+    [Tooltip("Segundos que queda cansado tras atacar.")]
+    public float ambushTiredTime = 4f;
+
+    [HideInInspector] public Vector3 AmbushHomePos;
+    [HideInInspector] public Quaternion AmbushHomeRot;
+    public AmbushHiddenState AmbushHiddenState { get; private set; }
+    public AmbushStalkState AmbushStalkState { get; private set; }
+    public AmbushRecoverState AmbushRecoverState { get; private set; }
+
     public EnemyAI LeaderAI { get; private set; }
 
     /// <summary>
@@ -338,6 +362,18 @@ public class EnemyAI : MonoBehaviour
             chaseSpeed = 6f;
             fleeSpeed = 8.0f;
         }
+        if (dinoEmboscador) //VALORES PERSONALES PARA DINO EMBOSCADOR
+        {
+            IsPrey = false; // Depredador: no huye ni forma manada
+            UpdateStaticCategory();
+            visionRange = ambushStalkRange;
+            visionAngle = 120f;
+            eyeHeight = 0.85f;
+            AttackRange = 2.0f;
+            chaseSpeed = ambushAttackSpeed;
+            AmbushHomePos = transform.position;
+            AmbushHomeRot = transform.rotation;
+        }
 
         StateMachine = new StateMachine();
         FlockingState = new Flockingstate(this);
@@ -347,6 +383,16 @@ public class EnemyAI : MonoBehaviour
         StateMachine.AllowState(FlockingState);
         StateMachine.AllowState(ChaseState);
         StateMachine.AllowState(FleeState);
+
+        if (dinoEmboscador)
+        {
+            AmbushHiddenState = new AmbushHiddenState(this);
+            AmbushStalkState = new AmbushStalkState(this);
+            AmbushRecoverState = new AmbushRecoverState(this);
+            StateMachine.AllowState(AmbushHiddenState);
+            StateMachine.AllowState(AmbushStalkState);
+            StateMachine.AllowState(AmbushRecoverState);
+        }
     }
 
     private void Start()
@@ -377,7 +423,8 @@ public class EnemyAI : MonoBehaviour
         // Color inicial normal
         SetVisualState(DinoVisualState.Normal);
 
-        StateMachine.Initialize(FlockingState);
+        if (dinoEmboscador) StateMachine.Initialize(AmbushHiddenState);
+        else StateMachine.Initialize(FlockingState);
     }
 
     private void Update()
@@ -693,6 +740,19 @@ public class EnemyAI : MonoBehaviour
         CurrentThreat = null;
         ChasingPredator = null;
         SpottedThreatPosition = Vector3.zero;
+
+        // El emboscador nunca patrulla: tras el ataque se recupera y vuelve a su sitio
+        if (dinoEmboscador)
+        {
+            if (StateMachine != null &&
+                StateMachine.CurrentState != AmbushRecoverState &&
+                StateMachine.CurrentState != AmbushHiddenState)
+            {
+                StateMachine.ChangeState(AmbushRecoverState);
+            }
+            return;
+        }
+
         if (StateMachine != null && StateMachine.CurrentState != FlockingState)
         {
             StateMachine.ChangeState(FlockingState);
