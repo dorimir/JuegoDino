@@ -507,8 +507,8 @@ MonoBehaviour:
       sizeOverridden: 0
     - dockPosition: 1
       containerId: overlay-toolbar__top
-      displayed: 1
-      id: Editor Controls/Layout
+      displayed: 0
+      id: Editor Utility/Quality
       index: 1
       contents: '{"m_Layout":4,"m_Collapsed":false,"m_Folded":false,"m_Floating":false,"m_FloatingSnapOffset":{"x":0.0,"y":0.0},"m_SnapOffsetDelta":{"x":0.0,"y":0.0},"m_FloatingSnapCorner":0,"m_Size":{"x":0.0,"y":0.0},"m_SizeOverridden":false}'
       floating: 0
@@ -521,8 +521,8 @@ MonoBehaviour:
       sizeOverridden: 0
     - dockPosition: 1
       containerId: overlay-toolbar__top
-      displayed: 0
-      id: Editor Utility/Quality
+      displayed: 1
+      id: Editor Controls/Layout
       index: 2
       contents: '{"m_Layout":4,"m_Collapsed":false,"m_Folded":false,"m_Floating":false,"m_FloatingSnapOffset":{"x":0.0,"y":0.0},"m_SnapOffsetDelta":{"x":0.0,"y":0.0},"m_FloatingSnapCorner":0,"m_Size":{"x":0.0,"y":0.0},"m_SizeOverridden":false}'
       floating: 0
@@ -1395,7 +1395,7 @@ MonoBehaviour:
   m_AudioPlay: 0
   m_DebugDrawModesUseInteractiveLightBakingData: 0
   m_Position:
-    m_Target: {x: 36.092785, y: 0.14400044, z: 50.138035}
+    m_Target: {x: -25.590376, y: -100.78945, z: 0.5128707}
     speed: 2
     m_Value: {x: 36.092785, y: 0.14400044, z: 50.138035}
   m_RenderMode: 0
@@ -1443,15 +1443,15 @@ MonoBehaviour:
     m_GridAxis: 1
     m_gridOpacity: 0.5
   m_Rotation:
-    m_Target: {x: -0.75671816, y: 0.0052944524, z: -0.0061249393, w: -0.65369964}
+    m_Target: {x: -0.58085054, y: 0.011540191, z: -0.008097857, w: -0.8139467}
     speed: 2
     m_Value: {x: -0.75671816, y: 0.0052944524, z: -0.0061249393, w: -0.65369964}
   m_Size:
-    m_Target: 21.603472
+    m_Target: 168.63388
     speed: 2
     m_Value: 21.603472
   m_Ortho:
-    m_Target: 1
+    m_Target: 0
     speed: 2
     m_Value: 1
   m_CameraSettings:
@@ -1999,20 +1999,7 @@ MonoBehaviour:
       m_Data: 57604
     m_ExpandedIDs:
     - m_Data: 0
-    - m_Data: 65588
-    - m_Data: 65590
-    - m_Data: 65592
-    - m_Data: 65594
-    - m_Data: 65596
-    - m_Data: 65598
-    - m_Data: 65600
-    - m_Data: 65602
-    - m_Data: 65604
-    - m_Data: 65606
-    - m_Data: 65608
-    - m_Data: 65610
-    - m_Data: 65612
-    - m_Data: 65614
+    - m_Data: 62906
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 
@@ -2045,20 +2032,7 @@ MonoBehaviour:
       m_Data: 0
     m_ExpandedIDs:
     - m_Data: 0
-    - m_Data: 65588
-    - m_Data: 65590
-    - m_Data: 65592
-    - m_Data: 65594
-    - m_Data: 65596
-    - m_Data: 65598
-    - m_Data: 65600
-    - m_Data: 65602
-    - m_Data: 65604
-    - m_Data: 65606
-    - m_Data: 65608
-    - m_Data: 65610
-    - m_Data: 65612
-    - m_Data: 65614
+    - m_Data: 62906
     m_RenameOverlay:
       m_UserAcceptedRename: 0
       m_Name: 

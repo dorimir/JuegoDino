@@ -39,6 +39,8 @@ public class ChaseState : IState
         if (ai.Movement != null)
         {
             ai.Movement.speed = ai.chaseSpeed;
+            // Emboscador: giro limitado para que el ataque se pueda esquivar
+            if (ai.dinoEmboscador) ai.Movement.chaseTurnRate = ai.ambushTurnRate;
         }
 
         if (ai.TargetDino != null)
@@ -140,6 +142,17 @@ public class ChaseState : IState
                 return;
             }
 
+            // Emboscador: la carrera dura un tiempo fijo y luego se cansa
+            if (ai.dinoEmboscador)
+            {
+                chaseDurationTimer += Time.deltaTime;
+                if (chaseDurationTimer >= ai.ambushAttackDuration)
+                {
+                    EndChase();
+                    return;
+                }
+            }
+
             Vector2 myPosHoriz = new Vector2(ai.transform.position.x, ai.transform.position.z);
             Vector2 playerPosHoriz = new Vector2(ai.Player.position.x, ai.Player.position.z);
             float distanceToPlayer = Vector2.Distance(myPosHoriz, playerPosHoriz);
@@ -225,7 +238,7 @@ public class ChaseState : IState
             ai.Movement.speed = ai.patrolSpeed;
             ai.Movement.ClearPath();
             ai.Movement.ResetVelocity();
-            ai.Movement.GoToNearestPatrolNode();
+            if (!ai.dinoEmboscador) ai.Movement.GoToNearestPatrolNode();
         }
     }
 }
