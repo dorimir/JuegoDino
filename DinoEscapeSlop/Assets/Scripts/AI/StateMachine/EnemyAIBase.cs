@@ -203,6 +203,8 @@ public class EnemyAI : MonoBehaviour
     private static bool hasDistributedPrey = false;
 
     public FleeState FleeState { get; private set; }
+    public SearchState SearchState { get; private set; }
+    public Vector3 SearchOrigin { get; private set; }
 
     [Header("Configuración de Visión y Persecución")]
     [Tooltip("Distancia máxima de visión del enemigo (2.5x más largo: 7.5 metros).")]
@@ -379,10 +381,12 @@ public class EnemyAI : MonoBehaviour
         FlockingState = new Flockingstate(this);
         ChaseState = new ChaseState(this);
         FleeState = new FleeState(this);
+        SearchState = new SearchState(this);
 
         StateMachine.AllowState(FlockingState);
         StateMachine.AllowState(ChaseState);
         StateMachine.AllowState(FleeState);
+        StateMachine.AllowState(SearchState);
 
         if (dinoEmboscador)
         {
@@ -728,6 +732,22 @@ public class EnemyAI : MonoBehaviour
         {
             StateMachine.ChangeState(FleeState);
         }
+    }
+
+    /// <summary>
+    /// Activa el modo Búsqueda (Search) hacia la última posición conocida del jugador.
+    /// </summary>
+    public void TriggerSearch(Vector3 lastKnownPos)
+    {
+        if (dinoEmboscador || StateMachine == null)
+        {
+            TriggerPatrol();
+            return;
+        }
+        CurrentChaseTarget = null;
+        TargetDino = null;
+        SearchOrigin = lastKnownPos;
+        StateMachine.ChangeState(SearchState);
     }
 
     /// <summary>

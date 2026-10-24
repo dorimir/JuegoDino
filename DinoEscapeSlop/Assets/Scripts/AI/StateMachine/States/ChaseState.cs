@@ -176,8 +176,8 @@ public class ChaseState : IState
                 float lostLimit = (ai.playerLostSightTime > 0f) ? ai.playerLostSightTime : 5.0f;
                 if (lostSightTimer >= lostLimit)
                 {
-                    Debug.Log($"[{ai.gameObject.name}]: El jugador escapó de la vista por {lostLimit:F1}s. Regresando a patrulla.");
-                    EndChase();
+                    Debug.Log($"[{ai.gameObject.name}]: El jugador escapó de la vista por {lostLimit:F1}s. Pasa a BÚSQUEDA.");
+                    ai.TriggerSearch(lastKnownTargetPos);
                     return;
                 }
             }
