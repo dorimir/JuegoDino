@@ -1,12 +1,18 @@
 using UnityEngine;
 
-public class ChaseState : IState
+public class ChaseState : IState, IPriorityState
 {
     protected EnemyAI ai;
     protected float repathTimer;
     protected const float RepathInterval = 0.25f;
     protected float lostSightTimer;
     protected Vector3 lastKnownTargetPos;
+
+    /// <summary>
+    /// Nivel de prioridad del estado. Si este chase fue activado por la alarma de un avisador,
+    /// adquiere prioridad máxima (100) y bloquea cualquier interrupción de patrulla, huida o investigación.
+    /// </summary>
+    public virtual int Priority => (ai != null && ai.isPriorityChase) ? 100 : 0;
 
     public ChaseState(EnemyAI ai)
     {
@@ -24,7 +30,12 @@ public class ChaseState : IState
             ai.Movement.speed = ai.chaseSpeed;
         }
 
-        if (ai.TargetDino != null)
+        if (ai.isPriorityChase)
+        {
+            ai.EnsurePlayerReference();
+            lastKnownTargetPos = (ai.Player != null) ? ai.Player.position : ai.transform.position;
+        }
+        else if (ai.TargetDino != null)
         {
             lastKnownTargetPos = ai.TargetDino.transform.position;
         }
@@ -37,7 +48,7 @@ public class ChaseState : IState
 
     public virtual void Update()
     {
-        if (ai.TargetDino != null)
+        if (!ai.isPriorityChase && ai.TargetDino != null)
         {
             // Los dinosaurios ciegos no atacan a los pequeños
             if (ai is BlindEnemyAI || (ai.TargetDino.IsSmallDino && ai is BlindEnemyAI))
@@ -159,16 +170,30 @@ public class ChaseState : IState
 
     public virtual void EndChase()
     {
-        if (ai.TargetDino != null)
+        if (ai != null)
+        {
+            ai.isPriorityChase = false;
+        }
+
+        if (ai != null && ai.TargetDino != null)
         {
             ai.preyCooldownTimer = ai.preyChaseCooldown;
+            ai.TargetDino = null;
         }
-        ai.TargetDino = null;
-        ai.TriggerPatrol();
+
+        if (ai != null)
+        {
+            ai.TriggerPatrol();
+        }
     }
 
     public virtual void Exit()
     {
+        if (ai != null)
+        {
+            ai.isPriorityChase = false;
+        }
+
         ai.SetVisualState(EnemyAI.DinoVisualState.Normal);
         ai.TargetDino = null;
 

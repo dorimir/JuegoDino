@@ -164,6 +164,7 @@ public class BlindEnemyAI : EnemyAI
 
     public virtual void TriggerInvestigate(Vector3 soundPos, Transform source = null)
     {
+        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad absoluta sobre investigar
         if (source != null)
         {
             EnemyAI sourceAI = source.GetComponentInParent<EnemyAI>();
@@ -182,6 +183,7 @@ public class BlindEnemyAI : EnemyAI
 
     public override void TriggerPatrol()
     {
+        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad absoluta sobre patrullar
         CurrentChaseTarget = null;
         TargetDino = null;
         CurrentThreat = null;

@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+using UnityEngine;
 
 public static class SceneSanitizer
 {
@@ -89,8 +89,6 @@ public static class SceneSanitizer
             {
                 mc.convex = true;
             }
-
-
         }
     }
 
@@ -113,6 +111,14 @@ public static class SceneSanitizer
             {
                 small.IsPrey = true;
                 small.dinoCiego = false;
+            }
+            else if (enemy is AlarmEnemyAI alarm)
+            {
+                alarm.IsPrey = false;
+                alarm.dinoCiego = false;
+                alarm.isLeader = false;
+                alarm.leaderTransform = null;
+                alarm.packFollowers.Clear();
             }
             else
             {
@@ -199,6 +205,7 @@ public static class SceneSanitizer
             }
         }
     }
+
     public static void AsegurarEnemigosEnNodos()
     {
         EnemyMovement[] allMovements = Object.FindObjectsByType<EnemyMovement>(FindObjectsInactive.Include, FindObjectsSortMode.None);

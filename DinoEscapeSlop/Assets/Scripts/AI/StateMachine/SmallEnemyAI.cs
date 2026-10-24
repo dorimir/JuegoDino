@@ -113,6 +113,7 @@ public class SmallEnemyAI : EnemyAI
     public override void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
         if (target == null) return;
+        if (IsPriorityChaseActive && targetDino != null) return;
         CurrentChaseTarget = target;
         TargetDino = targetDino;
 
@@ -125,6 +126,7 @@ public class SmallEnemyAI : EnemyAI
 
     public override void TriggerFlee(EnemyAI threat)
     {
+        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad absoluta sobre huir
         if (threat == null || threat == this) return;
         if (threat is BlindEnemyAI) return; // Los pequeños no huyen de los ciegos
         if (threat == LeaderAI || threat.EffectiveLeader == EffectiveLeader) return;
@@ -142,6 +144,7 @@ public class SmallEnemyAI : EnemyAI
 
     public override void TriggerPatrol()
     {
+        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad sobre patrullar
         CurrentChaseTarget = null;
         TargetDino = null;
         CurrentThreat = null;

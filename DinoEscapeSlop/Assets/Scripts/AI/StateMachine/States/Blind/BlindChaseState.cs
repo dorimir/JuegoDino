@@ -68,9 +68,22 @@ public class BlindChaseState : ChaseState
             float maxLost = (blindAI != null) ? blindAI.lostSoundDuration : 2.5f;
             if (lostSightTimer >= maxLost)
             {
-                if (blindAI != null) blindAI.TriggerInvestigate(targetSoundPos);
-                else EndChase();
-                return;
+                if (ai.IsPriorityChaseActive)
+                {
+                    // En persecución prioritaria por alarma no se degrada a investigar;
+                    // se mantiene dirigiéndose hacia la posición conocida del jugador
+                    if (lostSightTimer >= ai.playerLostSightTime)
+                    {
+                        EndChase();
+                        return;
+                    }
+                }
+                else
+                {
+                    if (blindAI != null) blindAI.TriggerInvestigate(targetSoundPos);
+                    else EndChase();
+                    return;
+                }
             }
         }
 

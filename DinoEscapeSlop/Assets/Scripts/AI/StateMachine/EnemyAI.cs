@@ -61,6 +61,11 @@ public class EnemyAI : MonoBehaviour
     public float preyChaseCooldown = 3.0f;
     [HideInInspector] public float preyCooldownTimer = 0f;
 
+    [Header("Prioridad de Chase por Alarma")]
+    [Tooltip("Indica si este enemigo se encuentra en el estado de persecución prioritario inducido por la alarma.")]
+    public bool isPriorityChase = false;
+    public bool IsPriorityChaseActive => isPriorityChase && StateMachine != null && (StateMachine.CurrentState == ChaseState || StateMachine.CurrentStatePriority > 0);
+
     [Header("Configuración de Flocking")]
     public float FlockRadius = 10f;
     public float TooCloseRadius = 2.5f;
@@ -133,10 +138,12 @@ public class EnemyAI : MonoBehaviour
     {
         if (this is SmallEnemyAI) { IsPrey = true; return; }
         if (this is BlindEnemyAI) { IsPrey = false; return; }
+        if (this is AlarmEnemyAI) { IsPrey = false; return; }
 
         string goName = gameObject.name.ToLower();
         if (goName.Contains("presa")) { IsPrey = true; return; }
         if (goName.Contains("ciego") || goName.Contains("blind")) { IsPrey = false; return; }
+        if (goName.Contains("alarma") || goName.Contains("avisador") || goName.Contains("screamer") || goName.Contains("spotter")) { IsPrey = false; return; }
         if (goName.Contains("lider") && !goName.Contains("presa")) { IsPrey = false; return; }
         if ((goName.Contains("seguidor") && !goName.Contains("presa")) || goName.Contains("sumiso") || goName.Contains("depredador") || goName.Contains("predator")) { IsPrey = false; return; }
 
@@ -453,6 +460,7 @@ public class EnemyAI : MonoBehaviour
     public virtual void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
         if (target == null) return;
+        if (IsPriorityChaseActive && targetDino != null) return; // Si la persecución prioritaria está activa, ignora presas
         if (this is BlindEnemyAI)
         {
             if (targetDino != null && targetDino.IsSmallDino) return;
@@ -477,8 +485,67 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Inicia el estado de persecución prioritario inducido por la alarma de un avisador.
+    /// Este estado adquiere prioridad máxima (100) en la StateMachine y no puede ser interrumpido por huida, patrulla o distracciones.
+    /// </summary>
+    public virtual void TriggerAlarmChase(Transform target, Vector3 targetPos)
+    {
+        if (target == null) return;
+
+        EnsurePlayerReference();
+        isPriorityChase = true;
+        CurrentChaseTarget = target;
+        TargetDino = null;
+
+        if (this is BlindEnemyAI blind)
+        {
+            blind.LastHeardSoundPos = targetPos;
+            blind.LastSoundSource = target;
+        }
+
+        // Si es presa pequeña con manada, activar la prioridad en toda la manada
+        if (IsSmallDino)
+        {
+            if (packFollowers != null)
+            {
+                for (int i = 0; i < packFollowers.Count; i++)
+                {
+                    EnemyAI follower = packFollowers[i];
+                    if (follower != null && follower.gameObject.activeInHierarchy && !follower.isPriorityChase)
+                    {
+                        follower.TriggerAlarmChase(target, targetPos);
+                    }
+                }
+            }
+            if (LeaderAI != null && LeaderAI.gameObject.activeInHierarchy && !LeaderAI.isPriorityChase)
+            {
+                LeaderAI.TriggerAlarmChase(target, targetPos);
+            }
+        }
+
+        if (StateMachine != null && ChaseState != null)
+        {
+            if (StateMachine.CurrentState != ChaseState)
+            {
+                StateMachine.ChangeState(ChaseState, force: true);
+            }
+            else
+            {
+                ChaseState.Enter();
+            }
+        }
+
+        if (Movement != null)
+        {
+            Movement.speed = chaseSpeed;
+            Movement.MoveTo(targetPos);
+        }
+    }
+
     public virtual void TriggerFlee(EnemyAI threat)
     {
+        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad sobre huir
         // Los dinosaurios grandes son depredadores dominantes y nunca huyen de otros dinosaurios
         if (IsBigDino) return;
         if (threat == null || threat == this) return;
@@ -510,6 +577,7 @@ public class EnemyAI : MonoBehaviour
     /// </summary>
     public virtual void TriggerScaredByLight(Transform threatPlayer)
     {
+        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad absoluta
         if (threatPlayer == null) EnsurePlayerReference();
         Transform threat = threatPlayer != null ? threatPlayer : Player;
         if (threat == null) return;
@@ -554,6 +622,7 @@ public class EnemyAI : MonoBehaviour
 
     public virtual void TriggerPatrol()
     {
+        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad sobre patrullar
         CurrentChaseTarget = null;
         TargetDino = null;
         CurrentThreat = null;
