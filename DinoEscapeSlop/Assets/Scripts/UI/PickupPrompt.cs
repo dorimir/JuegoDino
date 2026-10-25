@@ -4,25 +4,19 @@ using UnityEngine;
 public class PickupPrompt : MonoBehaviour
 {
     [Header("Configuración del Prompt")]
-    [Tooltip("Tecla o botón con el que se recoge el objeto.")]
+
     public string promptKey = "E";
 
-    [Tooltip("Texto de la acción a realizar.")]
     public string actionText = "Recoger";
 
-    [Tooltip("Nombre descriptivo del objeto.")]
     public string objectDisplayName = "";
 
-    [Tooltip("Distancia máxima en metros para visualizar el indicador flotante sobre el objeto.")]
     public float maxDistance = 6.0f;
 
-    [Tooltip("Altura sobre el objeto a la que se dibuja el texto flotante.")]
     public float heightOffset = 0.35f;
 
-    [Tooltip("Si es true, el cartel solo aparece cuando el jugador mira directamente al objeto con la mira.")]
     public bool onlyWhenLookingAt = true;
 
-    [Tooltip("Si es true, dibuja el indicador flotante en el espacio del mundo sobre el objeto.")]
     public bool showWorldBadge = false;
 
     private Camera playerCam;

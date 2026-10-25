@@ -9,7 +9,7 @@ public class FirstPersonAudio : MonoBehaviour
     [Header("Pasos")]
     public AudioSource stepAudio;
     public AudioSource runningAudio;
-    [Tooltip("Velocidad mínima para reproducir audio de movimiento.")]
+
     public float velocityThreshold = 0.01f;
 
     private Vector2 lastCharacterPosition;

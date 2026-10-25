@@ -81,9 +81,6 @@ public class SeparationSteering : MonoBehaviour
     }
 }
 
-/// <summary>
-/// Alias compatible con el nombre del archivo SeparationStereing.cs.
-/// </summary>
 public class SeparationStereing : SeparationSteering
 {
 }

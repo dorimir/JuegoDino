@@ -3,10 +3,9 @@ using UnityEngine;
 [ExecuteInEditMode]
 public class GroundCheck : MonoBehaviour
 {
-    [Tooltip("Distancia máxima respecto al suelo.")]
+
     public float distanceThreshold = 0.15f;
 
-    [Tooltip("Indica si el personaje se encuentra sobre el suelo.")]
     public bool isGrounded = true;
 
     public event System.Action Grounded;

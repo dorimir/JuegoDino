@@ -97,7 +97,6 @@ public class FleeState : IState
             ai.Movement.ClearPath();
         }
 
-        // Iniciar la huida continua de nodo a nodo
         AdvanceToNextFleeNode();
     }
 
@@ -151,8 +150,6 @@ public class FleeState : IState
 
             if (nodeAdvanceCooldown > 0f) nodeAdvanceCooldown -= Time.deltaTime;
 
-            // 1. Pipeline de Nodos: cuando el dinosaurio estÃ¡ a 0.9m o menos del nodo actual,
-            // selecciona con control de cadencia el siguiente nodo para mantener inercia continua sin saturar CPU.
             float distToTargetNode = (currentFleeNode != null)
                 ? Vector2.Distance(new Vector2(myPos.x, myPos.z), new Vector2(currentFleeNode.transform.position.x, currentFleeNode.transform.position.z))
                 : 0f;
@@ -164,7 +161,6 @@ public class FleeState : IState
                 AdvanceToNextFleeNode();
             }
 
-            // 2. Whisker frontal continuo: si una pared u obstÃ¡culo se aproxima a < 1.5m, reorientar al siguiente nodo
             if (obstacleAvoidCooldown > 0f) obstacleAvoidCooldown -= Time.deltaTime;
             else if (IsObstacleAhead(myPos, ai.transform.forward, bodyRadius, 1.5f))
             {
@@ -172,7 +168,6 @@ public class FleeState : IState
                 AdvanceToNextFleeNode(forceAlternative: true);
             }
 
-            // 3. Sistema anti-atasco: si no avanza al menos 15cm en 0.35s, forzar siguiente nodo
             stuckTimer += Time.deltaTime;
             if (stuckTimer >= StuckInterval)
             {
@@ -215,10 +210,6 @@ public class FleeState : IState
         }
     }
 
-    /// <summary>
-    /// Avanza de forma ininterrumpida de nodo a nodo en direcciÃ³n contraria al depredador.
-    /// Garantiza al 100% que siempre se asigna un nodo destino para que la presa jamÃ¡s se detenga.
-    /// </summary>
     private void AdvanceToNextFleeNode(bool forceAlternative = false)
     {
         Vector3 myPos = ai.transform.position;
@@ -256,20 +247,11 @@ public class FleeState : IState
         }
     }
 
-    /// <summary>
-    /// SelecciÃ³n de nodo en 5 niveles para asegurar que la presa nunca se quede parada:
-    /// Nivel 1: Nodo Ã³ptimo por lookahead que aleja en direcciÃ³n opuesta con pasaje libre.
-    /// Nivel 2: Mejor vecino despejado que no se dirija frontalmente hacia el depredador.
-    /// Nivel 3: Cualquier vecino del nodo actual con pasaje libre.
-    /// Nivel 4: Vecino conectado en el grafo que maximice la distancia a la amenaza.
-    /// Nivel 5: Nodo mÃ¡s lejano de la escena respecto a la amenaza.
-    /// </summary>
     private Node SelectFleeNodeWithFallbacks(Vector3 myPos, Vector3 threatPos, Vector3 fleeDir, float currentDistToThreat, float bodyRadius, bool forceAlternative)
     {
         if (ai.Pathfinding == null) ai.Pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
         Node[] allNodes = (ai.Pathfinding != null) ? ai.Pathfinding.GetAllNodes() : null;
 
-        // Recopilar candidatos: vecinos del nodo actual + nodos visibles en pasillo
         List<Node> candidates = new List<Node>();
 
         if (currentFleeNode != null && currentFleeNode.neighbors != null)
@@ -299,7 +281,6 @@ public class FleeState : IState
             }
         }
 
-        // --- NIVEL 1: BÃºsqueda Profunda (Lookahead) ---
         Node bestNode = null;
         float bestScore = float.MinValue;
 
@@ -320,10 +301,8 @@ public class FleeState : IState
             Vector3 nodeDir = toNode.normalized;
             float dotFlee = Vector3.Dot(nodeDir, fleeDir);
 
-            // Descartar si camina directamente de frente al depredador
             if (dotFlee < -0.35f && distNodeToThreat < currentDistToThreat) continue;
 
-            // Lookahead de ramas de escape (los vecinos del grafo ya tienen conexiÃ³n de pasaje)
             float lookaheadBonus = 0f;
             if (candidate.neighbors != null)
             {
@@ -353,7 +332,6 @@ public class FleeState : IState
 
         if (bestNode != null) return bestNode;
 
-        // --- NIVEL 2: Cualquier candidato despejado que no acerque al depredador ---
         Node bestLevel2 = null;
         float maxDistLevel2 = -1f;
         for (int i = 0; i < candidates.Count; i++)
@@ -374,7 +352,6 @@ public class FleeState : IState
 
         if (bestLevel2 != null) return bestLevel2;
 
-        // --- NIVEL 3: Cualquier vecino del nodo actual con pasaje libre ---
         if (currentFleeNode != null && currentFleeNode.neighbors != null)
         {
             for (int i = 0; i < currentFleeNode.neighbors.Count; i++)
@@ -387,7 +364,6 @@ public class FleeState : IState
             }
         }
 
-        // --- NIVEL 4: Vecino conectado en el grafo mÃ¡s lejano al depredador ---
         if (currentFleeNode != null && currentFleeNode.neighbors != null && currentFleeNode.neighbors.Count > 0)
         {
             Node bestNeighbor = null;
@@ -406,7 +382,6 @@ public class FleeState : IState
             if (bestNeighbor != null) return bestNeighbor;
         }
 
-        // --- NIVEL 5: Nodo global mÃ¡s lejano de la escena ---
         if (ai.Pathfinding != null)
         {
             Node farthest = ai.Pathfinding.GetFarthestNodeFromPosition(threatPos);
@@ -416,10 +391,6 @@ public class FleeState : IState
         return (allNodes != null && allNodes.Length > 0) ? allNodes[0] : null;
     }
 
-    /// <summary>
-    /// Verifica a altura uniforme horizontal (0.45m) si hay pasaje libre de colisiones entre dos puntos.
-    /// Evita falsos positivos por la altura vertical del gizmo de los nodos.
-    /// </summary>
     public static bool CanPassBetweenPoints(Vector3 fromPos, Vector3 toPos, float bodyRadius, Transform ignoreTransform = null)
     {
         float testHeight = 0.45f;
@@ -432,13 +403,11 @@ public class FleeState : IState
         Vector3 normDir = dir / dist;
         int wallMask = ~((1 << 3) | (1 << 2));
 
-        // 1. Linecast directo horizontal
         if (Physics.Linecast(origin, target, out RaycastHit lineHit, wallMask, QueryTriggerInteraction.Ignore))
         {
             if (IsValidWallObstacle(lineHit, ignoreTransform)) return false;
         }
 
-        // 2. SphereCast con radio de paso
         float castRadius = Mathf.Min(bodyRadius, 0.22f);
         if (dist > castRadius * 2f)
         {
@@ -453,9 +422,6 @@ public class FleeState : IState
         return true;
     }
 
-    /// <summary>
-    /// Whisker frontal para detectar esquinas o muros antes de impactar.
-    /// </summary>
     private bool IsObstacleAhead(Vector3 pos, Vector3 forward, float radius, float checkDist)
     {
         float rayHeight = 0.45f;
@@ -487,7 +453,7 @@ public class FleeState : IState
     private static bool IsValidWallObstacle(RaycastHit hit, Transform ignoreTransform)
     {
         if (hit.collider == null) return false;
-        if (hit.normal.y >= 0.7f) return false; // Filtra suelos y planos horizontales sin allocs
+        if (hit.normal.y >= 0.7f) return false;
         if (ignoreTransform != null && (hit.transform == ignoreTransform || hit.transform.IsChildOf(ignoreTransform))) return false;
 
         if (hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null) return false;

@@ -18,9 +18,11 @@ public static class SceneSanitizer
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     public static void SanitizeActiveScene()
     {
+        Time.timeScale = 1f;
         AudioListener.pause = false;
         AudioListener.volume = 1f;
         FirstPersonLook.IsCameraLocked = false;
+        EnemyAI.ResetGlobalState();
 
         AsegurarPosicionesObjetos();
         EliminarPilares();
@@ -36,16 +38,9 @@ public static class SceneSanitizer
         AsegurarMinimapa();
     }
 
-    /// <summary>
-    /// Configura y garantiza las posiciones exactas de spawn del mapa para:
-    /// - Las 10 llaves distribuidas en el escenario.
-    /// - La linterna.
-    /// - El jugador.
-    /// - El objeto sonoro.
-    /// </summary>
     public static void AsegurarPosicionesObjetos()
     {
-        // 1. Posición y velocidad del Jugador
+
         GameObject player = GameObject.FindGameObjectWithTag("Player");
         if (player != null)
         {
@@ -62,14 +57,12 @@ public static class SceneSanitizer
             }
         }
 
-        // 2. Posición, escala y modelo 3D de la Linterna
         Linterna linterna = Object.FindAnyObjectByType<Linterna>();
         if (linterna != null)
         {
             AsegurarModeloLinterna(linterna);
         }
 
-        // 3. Posición del Objeto Sonoro
         GameObject soundObj = GameObject.Find("Object+TriggerSonoro") ?? GameObject.FindGameObjectWithTag("canPickUp");
         if (soundObj != null)
         {
@@ -79,51 +72,12 @@ public static class SceneSanitizer
             if (rs != null) { rs.radioSonoro = 20f; }
         }
 
-        // 4. Posiciones exactas y distribuidas de las 10 llaves por todo el mapa
-        Vector3[] keyPositions = new Vector3[]
-        {
-            new Vector3(-129.5f, 0.6f, 22.0f),  // Key 0: Zona Inicio / Almacén Oeste
-            new Vector3(-142.0f, 0.6f, -42.0f), // Key 1: Extremo Suroeste (callejón sin salida)
-            new Vector3(-104.5f, 0.6f, 0.0f),   // Key 2: Territorio de la Manada de Raptors
-            new Vector3(-110.0f, 0.6f, -48.0f), // Key 3: Pasillo Sur-Oeste
-            new Vector3(-63.4f, 0.6f, -22.0f),  // Key 4: Pasillo Emboscador Oeste
-            new Vector3(-30.5f, 0.6f, 15.0f),   // Key 5: Cruce Central Emboscada y Alarma
-            new Vector3(3.6f, 0.6f, -46.0f),    // Key 6: Cámara Sur / Objeto Sonoro
-            new Vector3(32.0f, 0.6f, -2.5f),    // Key 7: Pasillo Emboscada Este
-            new Vector3(65.0f, 0.6f, -20.0f),   // Key 8: Sector Este (Dino Ciego)
-            new Vector3(55.1f, 0.6f, 48.4f)     // Key 9: Sector Noreste / Pasillo Salida
-        };
-
         string[] keyNames = new string[]
         {
             "Key", "Key (1)", "Key (2)", "Key (3)", "Key (4)",
             "Key (5)", "Key (6)", "Key (7)", "Key (8)", "Key (9)"
         };
 
-        List<GameObject> remainingKeys = new List<GameObject>(GameObject.FindGameObjectsWithTag("Key"));
-
-        for (int i = 0; i < keyPositions.Length; i++)
-        {
-            GameObject keyObj = GameObject.Find(keyNames[i]);
-            if (keyObj == null)
-            {
-                keyObj = GameObject.Find(keyNames[i].ToLower());
-            }
-            if (keyObj == null && i > 0)
-            {
-                keyObj = GameObject.Find($"Key({i})") ?? GameObject.Find($"key({i})");
-            }
-            if (keyObj == null && remainingKeys.Count > 0)
-            {
-                keyObj = remainingKeys[0];
-            }
-
-            if (keyObj != null)
-            {
-                keyObj.transform.position = keyPositions[i];
-                remainingKeys.Remove(keyObj);
-            }
-        }
     }
 
     public static void EliminarPilares()
@@ -412,15 +366,11 @@ public static class SceneSanitizer
         }
     }
 
-    /// <summary>
-    /// Garantiza y fija de forma permanente las posiciones y orientaciones actuales de los puntos de emboscada.
-    /// </summary>
     public static void AsegurarPuntosDeEmboscada()
     {
         string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
         if (currentScene.Contains("Menu") || currentScene.Contains("Win") || currentScene.Contains("Lose")) return;
 
-        // Posiciones fijas y permanentes de los puntos de emboscada actuales
         (string name, Vector3 pos, Vector3 euler)[] pointConfigs = new[]
         {
             ("AmbushPoint_PasilloOeste", new Vector3(-107.57f, 0f, 62.3899994f), new Vector3(0f, 180f, 0f)),
@@ -437,7 +387,6 @@ public static class SceneSanitizer
                 go = new GameObject(cfg.name);
             }
 
-            // Fijar permanentemente la posición y orientación del punto
             go.transform.position = cfg.pos;
             go.transform.rotation = Quaternion.Euler(cfg.euler);
 
@@ -448,9 +397,6 @@ public static class SceneSanitizer
         }
     }
 
-    /// <summary>
-    /// Garantiza la existencia, posición fija y configuración permanente del dinosaurio emboscador en la escena.
-    /// </summary>
     public static void AsegurarDinosaurioEmboscador()
     {
         string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
@@ -524,13 +470,11 @@ public static class SceneSanitizer
         MeshRenderer mr = linterna.GetComponent<MeshRenderer>();
         if (mr == null) mr = linterna.gameObject.AddComponent<MeshRenderer>();
 
-        // Si la malla no está asignada o tiene 0 vértices, generar una malla 3D procedural realista
         if (mf.sharedMesh == null || mf.sharedMesh.vertexCount == 0)
         {
             mf.sharedMesh = GenerarMallaLinterna();
         }
 
-        // Asegurar material adecuado si falta
         if (mr.sharedMaterial == null || mr.sharedMaterial.shader == null || mr.sharedMaterial.name.Contains("Default"))
         {
             Shader litShader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard");
@@ -546,7 +490,6 @@ public static class SceneSanitizer
             }
         }
 
-        // Posición spawn, escala y collider
         linterna.transform.position = new Vector3(-125.6f, 2.1f, 32.8f);
         linterna.transform.rotation = Quaternion.identity;
         linterna.transform.localScale = Vector3.one;
@@ -585,7 +528,6 @@ public static class SceneSanitizer
             bc.center = Vector3.zero;
         }
 
-        // Asegurar origen de emisión
         if (linterna.origen == null)
         {
             linterna.origen = linterna.transform;
@@ -606,7 +548,6 @@ public static class SceneSanitizer
         float[] zRings = new float[] { -0.18f, -0.10f, 0.02f, 0.06f, 0.13f, 0.14f };
         float[] rRings = new float[] {  0.025f, 0.025f, 0.025f, 0.045f, 0.045f, 0.040f };
 
-        // Anillos del cuerpo (mango, cuello cónico y cabezal con bisel)
         for (int ring = 0; ring < zRings.Length; ring++)
         {
             float z = zRings[ring];
@@ -642,7 +583,6 @@ public static class SceneSanitizer
             }
         }
 
-        // Tapa trasera (end cap en z = -0.18f)
         int backCenterIdx = vertices.Count;
         vertices.Add(new Vector3(0f, 0f, -0.18f));
         normals.Add(Vector3.back);
@@ -667,7 +607,6 @@ public static class SceneSanitizer
             triangles.Add(backRingStart + i);
         }
 
-        // Lente frontal (glass lens en z = 0.14f)
         int frontCenterIdx = vertices.Count;
         vertices.Add(new Vector3(0f, 0f, 0.14f));
         normals.Add(Vector3.forward);

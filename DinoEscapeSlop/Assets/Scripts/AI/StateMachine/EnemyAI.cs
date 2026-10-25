@@ -6,9 +6,9 @@ public class EnemyAI : MonoBehaviour
 {
     public enum DinoTier
     {
-        Small,   // Dinosaurio Pequeño (1/3 escala, manada)
-        Medium,  // Dinosaurio Mediano (escala normal)
-        Big      // Dinosaurio Grande (T-Rex)
+        Small,
+        Medium,
+        Big
     }
 
     [Header("Referencias de Componentes")]
@@ -49,21 +49,21 @@ public class EnemyAI : MonoBehaviour
     public float SafeRange = 22f;
 
     [Header("Dinosaurio emboscador")]
-    [Tooltip("Espera quieto en su sitio, acecha y se lanza en una carrera corta.")]
+
     public bool dinoEmboscador = false;
-    [Tooltip("Distancia a la que detecta al jugador y empieza a acechar.")]
+
     public float ambushStalkRange = 9f;
-    [Tooltip("Distancia a la que, tras el aviso, se lanza al ataque.")]
+
     public float ambushTriggerRange = 5f;
-    [Tooltip("Segundos de aviso (acecho) antes de atacar.")]
+
     public float ambushWarningTime = 1.2f;
-    [Tooltip("Duración máxima de la carrera de ataque.")]
+
     public float ambushAttackDuration = 2f;
-    [Tooltip("Velocidad de la carrera de ataque.")]
+
     public float ambushAttackSpeed = 11f;
-    [Tooltip("Giro máximo durante el ataque (grados/s). Bajo = esquivable.")]
+
     public float ambushTurnRate = 90f;
-    [Tooltip("Segundos que queda cansado tras atacar.")]
+
     public float ambushTiredTime = 4f;
 
     [HideInInspector] public Vector3 AmbushHomePos;
@@ -109,7 +109,7 @@ public class EnemyAI : MonoBehaviour
     [HideInInspector] public float preyCooldownTimer = 0f;
 
     [Header("Prioridad de Chase por Alarma")]
-    [Tooltip("Indica si este enemigo se encuentra en el estado de persecución prioritario inducido por la alarma.")]
+
     public bool isPriorityChase = false;
     public bool IsPriorityChaseActive => isPriorityChase && StateMachine != null && (StateMachine.CurrentState == ChaseState || StateMachine.CurrentStatePriority > 0);
 
@@ -128,6 +128,7 @@ public class EnemyAI : MonoBehaviour
     public FollowLeaderState FollowLeaderState { get; protected set; }
 
     public static bool GlobalPlayerDead = false;
+    public static bool isRestarting = false;
     public static EnemyAI KillerDino { get; private set; }
     public bool isPlayerDead => GlobalPlayerDead;
 
@@ -243,14 +244,12 @@ public class EnemyAI : MonoBehaviour
             return;
         }
 
-        // Dino Grande (T-Rex)
         if ((goName.Contains("lider") || goName.Contains("dinogrande")) && !goName.Contains("presa"))
         {
             Tier = DinoTier.Big;
             return;
         }
 
-        // Dino Mediano
         if (goName.Contains("seguidor") && !goName.Contains("presa"))
         {
             Tier = DinoTier.Medium;
@@ -308,7 +307,7 @@ public class EnemyAI : MonoBehaviour
 
         if (IsSmallDino)
         {
-            // Dino pequeño (manada): más rápido, amplio campo de visión, huye de mediano y grande
+
             visionAngle = 260f;
             visionRange = 11.5f;
             DetectionRange = 11.5f;
@@ -321,7 +320,7 @@ public class EnemyAI : MonoBehaviour
         }
         else if (IsBigDino)
         {
-            // Dino grande (T-Rex): más lento que el mediano, caza jugador y medianos, nunca huye
+
             visionAngle = 100f;
             visionRange = 12.0f;
             DetectionRange = 12.0f;
@@ -334,7 +333,7 @@ public class EnemyAI : MonoBehaviour
         }
         else
         {
-            // Dino mediano: velocidad normal (actual), caza jugador y pequeños, huye del grande
+
             visionAngle = 110f;
             visionRange = 9.0f;
             DetectionRange = 9.0f;
@@ -392,7 +391,7 @@ public class EnemyAI : MonoBehaviour
         }
         else if (IsBigDino)
         {
-            // Dino grande: patrulla y caza (no huye de otros dinosaurios)
+
             PatrolState predPatrol = new PatrolState(this);
             ChaseState predChase = new ChaseState(this);
 
@@ -406,7 +405,7 @@ public class EnemyAI : MonoBehaviour
         }
         else
         {
-            // Dino mediano: patrulla, caza (jugador y pequeños) y huye (del grande)
+
             PatrolState medPatrol = new PatrolState(this);
             ChaseState medChase = new ChaseState(this);
             FleeState flee = new FleeState(this);
@@ -483,6 +482,8 @@ public class EnemyAI : MonoBehaviour
 
     protected virtual void Update()
     {
+        if (isRestarting) return;
+
         if (preyCooldownTimer > 0f) preyCooldownTimer -= Time.deltaTime;
 
         if (GlobalPlayerDead)
@@ -759,14 +760,13 @@ public class EnemyAI : MonoBehaviour
             if (target.GetComponentInParent<EnemyAI>() != null) return;
         }
 
-        // Jerarquía de caza:
         if (targetDino != null)
         {
-            // Pequeño no caza otros dinosaurios
+
             if (IsSmallDino) return;
-            // Mediano solo caza pequeños
+
             if (IsMediumDino && !targetDino.IsSmallDino) return;
-            // Grande solo caza medianos
+
             if (IsBigDino && !targetDino.IsMediumDino) return;
         }
 
@@ -844,15 +844,13 @@ public class EnemyAI : MonoBehaviour
     {
         if (this is BlindEnemyAI || dinoCiego) return;
         if (IsPriorityChaseActive) return;
-        if (IsBigDino) return; // El dinosaurio grande nunca huye de otros dinosaurios
+        if (IsBigDino) return;
         if (threat == null || threat == this) return;
         if (threat is BlindEnemyAI || threat is AmbushEnemyAI || threat.dinoEmboscador) return;
         if (threat == LeaderAI || threat.EffectiveLeader == EffectiveLeader) return;
 
-        // Jerarquía de huida:
-        // Mediano solo huye del Grande
         if (IsMediumDino && !threat.IsBigDino) return;
-        // Pequeño huye de Mediano y de Grande
+
         if (IsSmallDino && !threat.IsMediumDino && !threat.IsBigDino) return;
 
         CurrentThreat = threat.transform;
@@ -1086,7 +1084,6 @@ public class EnemyAI : MonoBehaviour
         spottedThreat = null;
         if (IsBigDino || this is BlindEnemyAI || dinoCiego) return false;
 
-        // 1. Dinosaurio Mediano: huye del dinosaurio Grande (T-Rex)
         if (IsMediumDino)
         {
             for (int i = 0; i < AllBigDinos.Count; i++)
@@ -1104,10 +1101,9 @@ public class EnemyAI : MonoBehaviour
             return false;
         }
 
-        // 2. Dinosaurio Pequeño: huye de Medianos y de Grandes
         if (IsSmallDino)
         {
-            // Primero evaluar si hay dinosaurios Grandes en visión
+
             for (int i = 0; i < AllBigDinos.Count; i++)
             {
                 EnemyAI big = AllBigDinos[i];
@@ -1121,7 +1117,6 @@ public class EnemyAI : MonoBehaviour
                 }
             }
 
-            // Luego evaluar si hay dinosaurios Medianos en visión
             for (int i = 0; i < AllMediumDinos.Count; i++)
             {
                 EnemyAI med = AllMediumDinos[i];
@@ -1144,7 +1139,6 @@ public class EnemyAI : MonoBehaviour
         spottedPrey = null;
         if (IsSmallDino || this is BlindEnemyAI || this is AmbushEnemyAI || dinoEmboscador) return false;
 
-        // 1. Dinosaurio Grande: caza dinosaurios Medianos
         if (IsBigDino)
         {
             for (int i = 0; i < AllMediumDinos.Count; i++)
@@ -1162,7 +1156,6 @@ public class EnemyAI : MonoBehaviour
             return false;
         }
 
-        // 2. Dinosaurio Mediano: caza dinosaurios Pequeños
         if (IsMediumDino)
         {
             for (int i = 0; i < AllSmallDinos.Count; i++)
@@ -1229,7 +1222,7 @@ public class EnemyAI : MonoBehaviour
 
     public void KillPlayer()
     {
-        if (GlobalPlayerDead) return;
+        if (GlobalPlayerDead || isRestarting) return;
         GlobalPlayerDead = true;
         KillerDino = this;
 
@@ -1237,7 +1230,6 @@ public class EnemyAI : MonoBehaviour
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
 
-        // 1. Quitar el sonido y silenciar todo el audio del juego
         AudioListener.pause = true;
         AudioListener.volume = 0f;
 
@@ -1250,10 +1242,8 @@ public class EnemyAI : MonoBehaviour
             }
         }
 
-        // 2. Bloquear el movimiento de la cámara
         FirstPersonLook.IsCameraLocked = true;
 
-        // 3. Forzar soltar cualquier objeto que se estuviese sosteniendo
         PickUpScript pickup = Object.FindAnyObjectByType<PickUpScript>();
         if (pickup != null && pickup.IsHoldingObject)
         {
@@ -1261,15 +1251,35 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    public static void RestartGame()
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
+    private static void SubscribeSceneLoaded()
+    {
+        SceneManager.sceneLoaded -= OnSceneLoadedReset;
+        SceneManager.sceneLoaded += OnSceneLoadedReset;
+    }
+
+    private static void OnSceneLoadedReset(Scene scene, LoadSceneMode mode)
     {
         ResetGlobalState();
+    }
+
+    public static void RestartGame()
+    {
+        if (isRestarting) return;
+        isRestarting = true;
+
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
+        AudioListener.volume = 1f;
+        FirstPersonLook.IsCameraLocked = false;
+
         string activeScene = SceneManager.GetActiveScene().name;
         SceneManager.LoadScene(activeScene);
     }
 
     public static void ResetGlobalState()
     {
+        isRestarting = false;
         GlobalPlayerDead = false;
         KillerDino = null;
         hasDistributedPrey = false;
@@ -1281,7 +1291,6 @@ public class EnemyAI : MonoBehaviour
         Cursor.lockState = CursorLockMode.Locked;
         Cursor.visible = false;
 
-        // Restaurar sonido y desbloquear cámara
         AudioListener.pause = false;
         AudioListener.volume = 1f;
         FirstPersonLook.IsCameraLocked = false;

@@ -1,38 +1,27 @@
 using UnityEngine;
 
-/// <summary>
-/// Inteligencia Artificial específica para el dinosaurio ciego.
-/// Reemplaza la visión por audición/detección de ruidos del jugador y objetos de distracción.
-/// </summary>
 public class BlindEnemyAI : EnemyAI
 {
     [Header("Audición y Sonido")]
-    [Tooltip("Multiplicador general de la sensibilidad auditiva del dinosaurio ciego.")]
+
     public float hearingSensitivityMultiplier = 1.0f;
 
-    [Tooltip("Radio de detección de sonido cuando el jugador corre.")]
     public float runNoiseRadius = 15.0f;
 
-    [Tooltip("Radio de detección de sonido cuando el jugador camina normalmente.")]
     public float walkNoiseRadius = 6.5f;
 
-    [Tooltip("Radio de detección de sonido cuando el jugador va agachado.")]
     public float crouchNoiseRadius = 2.0f;
 
-    [Tooltip("Radio de detección de sonido cuando el jugador salta o aterriza.")]
     public float jumpNoiseRadius = 10.0f;
 
-    [Tooltip("Umbral de intensidad a partir del cual el sonido provoca persecución directa en vez de investigación.")]
     public float highUrgencyThreshold = 1.0f;
 
     [Header("Tiempos e Investigación")]
-    [Tooltip("Velocidad de movimiento mientras investiga un ruido.")]
+
     public float investigateSpeed = 3.6f;
 
-    [Tooltip("Tiempo máximo de silencio en persecución antes de volver a investigar.")]
     public float lostSoundDuration = 2.5f;
 
-    [Tooltip("Tiempo que permanece rastreando en el lugar del sonido.")]
     public float investigateWaitDuration = 3.5f;
 
     public BlindPatrolState BlindPatrol { get; protected set; }
@@ -81,22 +70,16 @@ public class BlindEnemyAI : EnemyAI
         StateMachine.AllowState(BlindPatrol);
         StateMachine.AllowState(BlindInvestigate);
         StateMachine.AllowState(BlindChase);
-        // El dinosaurio ciego no entra en estado de huida (FleeState)
+
     }
 
     public override float GetVisionOrFacingCone() => 110f;
 
-    /// <summary>
-    /// El dinosaurio ciego no posee visión: no percibe la luz de la linterna y nunca se asusta ni entra en huida.
-    /// </summary>
     public override void TriggerScaredByLight(Transform threatPlayer)
     {
         return;
     }
 
-    /// <summary>
-    /// El dinosaurio ciego no responde a señales de huida ni huye de otros depredadores.
-    /// </summary>
     public override void NotifyPackFlee(EnemyAI threat)
     {
         return;
@@ -169,10 +152,6 @@ public class BlindEnemyAI : EnemyAI
     {
     }
 
-    /// <summary>
-    /// Notificacion inmediata de sonido prioritario (objeto sonoro o impacto de linterna al caer).
-    /// Interrumpe patrullaje o persecucion previa para investigar la fuente sonora de distraccion.
-    /// </summary>
     public void NotificarSonidoPrioritario(Vector3 soundPos, float intensity, Transform soundSource)
     {
         LastHeardSoundPos = soundPos;
@@ -195,9 +174,6 @@ public class BlindEnemyAI : EnemyAI
         intensity = 0f;
         soundSource = null;
 
-        // =========================================================================
-        // 1. PRIORIDAD MAXIMA: Sonido del Objeto Sonoro (RastreoSonoro)
-        // =========================================================================
         if (RastreoSonoro.HaySonidoObjetoActivo(transform.position, hearingSensitivityMultiplier, out Vector3 objPos, out float objIntensity, out Transform objSource))
         {
             soundPos = objPos;
@@ -209,9 +185,6 @@ public class BlindEnemyAI : EnemyAI
             return true;
         }
 
-        // =========================================================================
-        // 2. PRIORIDAD MAXIMA: Sonido de la Linterna Cayendo / Impactando (Linterna)
-        // =========================================================================
         if (Linterna.HaySonidoCaidaActivo(transform.position, hearingSensitivityMultiplier, out Vector3 linternaPos, out float linternaIntensity, out Transform linternaSource))
         {
             soundPos = linternaPos;
@@ -223,9 +196,6 @@ public class BlindEnemyAI : EnemyAI
             return true;
         }
 
-        // =========================================================================
-        // 3. PRIORIDAD SECUNDARIA: Ruido generado por el movimiento del Jugador
-        // =========================================================================
         EnsurePlayerReference();
         if (Player != null)
         {

@@ -1,10 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// Estado de alarma para el dinosaurio avisador (AlarmEnemyAI).
-/// Detiene el movimiento del dinosaurio por completo, lo mantiene quieto
-/// encarando al jugador y difunde la posición del jugador a los demás dinosaurios.
-/// </summary>
 public class AlarmState : ChaseState, IPriorityState
 {
     protected AlarmEnemyAI alarmAI;
