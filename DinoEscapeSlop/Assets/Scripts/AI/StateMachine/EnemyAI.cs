@@ -4,6 +4,13 @@ using UnityEngine.SceneManagement;
 
 public class EnemyAI : MonoBehaviour
 {
+    public enum DinoTier
+    {
+        Small,   // Dinosaurio Pequeño (1/3 escala, manada)
+        Medium,  // Dinosaurio Mediano (escala normal)
+        Big      // Dinosaurio Grande (T-Rex)
+    }
+
     [Header("Referencias de Componentes")]
     public EnemyMovement Movement { get; set; }
     public AStarPathfinding Pathfinding { get; set; }
@@ -11,23 +18,59 @@ public class EnemyAI : MonoBehaviour
     [Header("Jugador")]
     public Transform Player;
 
+    [Header("Jerarquía de Dinosaurios")]
+    public DinoTier Tier = DinoTier.Medium;
+    public bool IsSmallDino => Tier == DinoTier.Small || IsPrey || this is SmallEnemyAI;
+    public bool IsMediumDino => Tier == DinoTier.Medium && !IsSmallDino && !IsBigDino;
+    public bool IsBigDino => Tier == DinoTier.Big;
+
     [Header("Configuración de Rol y Líder")]
     public bool isLeader = false;
     public Transform leaderTransform = null;
     public List<EnemyAI> packFollowers = new List<EnemyAI>();
-    public EnemyAI LeaderAI { get; protected set; }
+    public EnemyAI LeaderAI { get; set; }
 
     public EnemyAI EffectiveLeader => (IsSmallDino && LeaderAI != null && LeaderAI.gameObject.activeInHierarchy) ? LeaderAI : this;
     public Vector3 SpawnPosition => (Movement != null) ? Movement.SpawnPosition : transform.position;
     public Quaternion SpawnRotation => (Movement != null) ? Movement.SpawnRotation : transform.rotation;
 
-    [Header("Configuración de Presa / Depredador")]
+    [Header("Configuración de Presa / Depredador (Compatibilidad)")]
     [HideInInspector] public bool dinoCiego = false;
-    public bool IsPrey = false;
+    public bool IsPrey
+    {
+        get => Tier == DinoTier.Small;
+        set
+        {
+            if (value) Tier = DinoTier.Small;
+            else if (Tier == DinoTier.Small) Tier = DinoTier.Medium;
+        }
+    }
     public bool isPrey { get => IsPrey; set => IsPrey = value; }
-    public bool IsBigDino => !IsPrey;
-    public bool IsSmallDino => IsPrey;
     public float SafeRange = 22f;
+
+    [Header("Dinosaurio emboscador")]
+    [Tooltip("Espera quieto en su sitio, acecha y se lanza en una carrera corta.")]
+    public bool dinoEmboscador = false;
+    [Tooltip("Distancia a la que detecta al jugador y empieza a acechar.")]
+    public float ambushStalkRange = 9f;
+    [Tooltip("Distancia a la que, tras el aviso, se lanza al ataque.")]
+    public float ambushTriggerRange = 5f;
+    [Tooltip("Segundos de aviso (acecho) antes de atacar.")]
+    public float ambushWarningTime = 1.2f;
+    [Tooltip("Duración máxima de la carrera de ataque.")]
+    public float ambushAttackDuration = 2f;
+    [Tooltip("Velocidad de la carrera de ataque.")]
+    public float ambushAttackSpeed = 11f;
+    [Tooltip("Giro máximo durante el ataque (grados/s). Bajo = esquivable.")]
+    public float ambushTurnRate = 90f;
+    [Tooltip("Segundos que queda cansado tras atacar.")]
+    public float ambushTiredTime = 4f;
+
+    [HideInInspector] public Vector3 AmbushHomePos;
+    [HideInInspector] public Quaternion AmbushHomeRot;
+    public AmbushHiddenState AmbushHiddenState { get; protected set; }
+    public AmbushStalkState AmbushStalkState { get; protected set; }
+    public AmbushRecoverState AmbushRecoverState { get; protected set; }
 
     [Header("Objetivos Dinámicos")]
     public Transform CurrentThreat { get; set; }
@@ -37,9 +80,13 @@ public class EnemyAI : MonoBehaviour
     public EnemyAI TargetDino { get; set; }
 
     public static readonly List<EnemyAI> AllEnemies = new List<EnemyAI>();
-    public static readonly List<EnemyAI> AllPrey = new List<EnemyAI>();
-    public static readonly List<EnemyAI> AllPredators = new List<EnemyAI>();
+    public static readonly List<EnemyAI> AllSmallDinos = new List<EnemyAI>();
+    public static readonly List<EnemyAI> AllMediumDinos = new List<EnemyAI>();
+    public static readonly List<EnemyAI> AllBigDinos = new List<EnemyAI>();
+    public static List<EnemyAI> AllPrey => AllSmallDinos;
+    public static List<EnemyAI> AllPredators => AllBigDinos;
     protected static bool hasDistributedPrey = false;
+    private static readonly RaycastHit[] visionRaycastHits = new RaycastHit[16];
 
     [Header("Configuración de Visión y Persecución")]
     public float visionRange = 7.5f;
@@ -90,7 +137,16 @@ public class EnemyAI : MonoBehaviour
     private static readonly int ColorId = Shader.PropertyToID("_Color");
     private static readonly int EmissionColorId = Shader.PropertyToID("_EmissionColor");
 
-    public enum DinoVisualState { Normal, Chasing, Fleeing, Alert }
+    public enum DinoVisualState
+    {
+        Normal,
+        Chasing,
+        Fleeing,
+        Alert,
+        Alarm,
+        Stalking,
+        Tired
+    }
 
     protected virtual void OnEnable()
     {
@@ -101,24 +157,30 @@ public class EnemyAI : MonoBehaviour
     protected virtual void OnDisable()
     {
         AllEnemies.Remove(this);
-        AllPrey.Remove(this);
-        AllPredators.Remove(this);
+        AllSmallDinos.Remove(this);
+        AllMediumDinos.Remove(this);
+        AllBigDinos.Remove(this);
         if (LeaderAI != null) LeaderAI.packFollowers.Remove(this);
     }
 
     public void UpdateStaticCategory()
     {
         if (!AllEnemies.Contains(this)) AllEnemies.Add(this);
-        AllPrey.Remove(this);
-        AllPredators.Remove(this);
+        AllSmallDinos.Remove(this);
+        AllMediumDinos.Remove(this);
+        AllBigDinos.Remove(this);
 
-        if (IsPrey)
+        if (IsSmallDino)
         {
-            if (!AllPrey.Contains(this)) AllPrey.Add(this);
+            if (!AllSmallDinos.Contains(this)) AllSmallDinos.Add(this);
+        }
+        else if (IsBigDino)
+        {
+            if (!AllBigDinos.Contains(this)) AllBigDinos.Add(this);
         }
         else
         {
-            if (!AllPredators.Contains(this)) AllPredators.Add(this);
+            if (!AllMediumDinos.Contains(this)) AllMediumDinos.Add(this);
         }
     }
 
@@ -136,25 +198,83 @@ public class EnemyAI : MonoBehaviour
 
     protected virtual void DeterminePreyOrPredator()
     {
-        if (this is SmallEnemyAI) { IsPrey = true; return; }
-        if (this is BlindEnemyAI) { IsPrey = false; return; }
-        if (this is AlarmEnemyAI) { IsPrey = false; return; }
+        if (this is SmallEnemyAI)
+        {
+            Tier = DinoTier.Small;
+            return;
+        }
+        if (this is BigEnemyAI)
+        {
+            Tier = DinoTier.Big;
+            return;
+        }
+        if (this is BlindEnemyAI || this is AlarmEnemyAI || this is AmbushEnemyAI)
+        {
+            Tier = DinoTier.Medium;
+            if (this is AmbushEnemyAI) dinoEmboscador = true;
+            return;
+        }
 
         string goName = gameObject.name.ToLower();
-        if (goName.Contains("presa")) { IsPrey = true; return; }
-        if (goName.Contains("ciego") || goName.Contains("blind")) { IsPrey = false; return; }
-        if (goName.Contains("alarma") || goName.Contains("avisador") || goName.Contains("screamer") || goName.Contains("spotter")) { IsPrey = false; return; }
-        if (goName.Contains("lider") && !goName.Contains("presa")) { IsPrey = false; return; }
-        if ((goName.Contains("seguidor") && !goName.Contains("presa")) || goName.Contains("sumiso") || goName.Contains("depredador") || goName.Contains("predator")) { IsPrey = false; return; }
+        if (goName.Contains("presa") || goName.Contains("small") || goName.Contains("pequeño") || goName.Contains("pequeno"))
+        {
+            Tier = DinoTier.Small;
+            return;
+        }
 
-        // Si ya fue configurado en el Inspector (como los prefabs o instancias de escena con IsPrey = true), respetarlo
-        if (IsPrey) return;
+        if (goName.Contains("emboscad") || goName.Contains("ambush"))
+        {
+            Tier = DinoTier.Medium;
+            dinoEmboscador = true;
+            return;
+        }
 
-        // Fallback: los depredadores tienen escala ~2.08 o 3.0, las presas son pequeñas ~0.9 - 1.0
+        if (goName.Contains("ciego") || goName.Contains("blind"))
+        {
+            Tier = DinoTier.Medium;
+            dinoCiego = true;
+            return;
+        }
+
+        if (goName.Contains("alarma") || goName.Contains("avisador") ||
+            goName.Contains("screamer") || goName.Contains("spotter"))
+        {
+            Tier = DinoTier.Medium;
+            return;
+        }
+
+        // Dino Grande (T-Rex)
+        if ((goName.Contains("lider") || goName.Contains("dinogrande")) && !goName.Contains("presa"))
+        {
+            Tier = DinoTier.Big;
+            return;
+        }
+
+        // Dino Mediano
+        if (goName.Contains("seguidor") && !goName.Contains("presa"))
+        {
+            Tier = DinoTier.Medium;
+            return;
+        }
+
+        if (goName.Contains("grande") || goName.Contains("t-rex") || goName.Contains("trex"))
+        {
+            Tier = DinoTier.Big;
+            return;
+        }
+
+        if (goName.Contains("mediano") || goName.Contains("medium"))
+        {
+            Tier = DinoTier.Medium;
+            return;
+        }
+
         float scale = Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z);
-        IsPrey = (scale < 1.5f);
+        if (scale < 1.1f) Tier = DinoTier.Small;
+        else if (scale >= 2.5f) Tier = DinoTier.Big;
+        else Tier = DinoTier.Medium;
 
-        if (!IsPrey)
+        if (!IsSmallDino)
         {
             isLeader = false;
             leaderTransform = null;
@@ -178,8 +298,9 @@ public class EnemyAI : MonoBehaviour
             {
                 LeaderAI = leaderTransform.GetComponent<EnemyAI>();
             }
-            else if (isLeader)
+            else if (isLeader && (packFollowers == null || packFollowers.Count == 0))
             {
+                isLeader = false;
                 LeaderAI = null;
             }
             packFollowers.Clear();
@@ -187,25 +308,41 @@ public class EnemyAI : MonoBehaviour
 
         if (IsSmallDino)
         {
-            visionAngle = 280f;
+            // Dino pequeño (manada): más rápido, amplio campo de visión, huye de mediano y grande
+            visionAngle = 260f;
             visionRange = 11.5f;
             DetectionRange = 11.5f;
             eyeHeight = 0.35f;
             AttackRange = 1.3f;
-            patrolSpeed = 5.2f;
+            patrolSpeed = 4.8f;
             chaseSpeed = 9.8f;
             fleeSpeed = 13.0f;
-            SafeRange = 12.0f;
+            SafeRange = 14.0f;
+        }
+        else if (IsBigDino)
+        {
+            // Dino grande (T-Rex): más lento que el mediano, caza jugador y medianos, nunca huye
+            visionAngle = 100f;
+            visionRange = 12.0f;
+            DetectionRange = 12.0f;
+            eyeHeight = 1.6f;
+            AttackRange = 2.8f;
+            patrolSpeed = 1.8f;
+            chaseSpeed = 5.8f;
+            fleeSpeed = 0f;
+            SafeRange = 0f;
         }
         else
         {
-            visionAngle = 100f;
-            visionRange = 8.5f;
+            // Dino mediano: velocidad normal (actual), caza jugador y pequeños, huye del grande
+            visionAngle = 110f;
+            visionRange = 9.0f;
+            DetectionRange = 9.0f;
             eyeHeight = 0.85f;
             AttackRange = 2.0f;
             patrolSpeed = 2.4f;
             chaseSpeed = 7.5f;
-            fleeSpeed = 8.0f;
+            fleeSpeed = 8.8f;
             SafeRange = 16.0f;
         }
     }
@@ -213,7 +350,30 @@ public class EnemyAI : MonoBehaviour
     protected virtual void SetupStateMachine()
     {
         StateMachine = new StateMachine();
-        if (IsSmallDino)
+        if (dinoEmboscador)
+        {
+            Tier = DinoTier.Medium;
+            UpdateStaticCategory();
+            visionRange = ambushStalkRange;
+            visionAngle = 120f;
+            eyeHeight = 0.85f;
+            AttackRange = 2.0f;
+            chaseSpeed = ambushAttackSpeed;
+            AmbushHomePos = transform.position;
+            AmbushHomeRot = transform.rotation;
+
+            AmbushHiddenState = new AmbushHiddenState(this);
+            AmbushStalkState = new AmbushStalkState(this);
+            AmbushRecoverState = new AmbushRecoverState(this);
+            ChaseState = new ChaseState(this);
+            FleeState = new FleeState(this);
+            StateMachine.AllowState(AmbushHiddenState);
+            StateMachine.AllowState(AmbushStalkState);
+            StateMachine.AllowState(AmbushRecoverState);
+            StateMachine.AllowState(ChaseState);
+            StateMachine.AllowState(FleeState);
+        }
+        else if (IsSmallDino)
         {
             PreyPatrolState preyPatrol = new PreyPatrolState(this);
             PreyChaseState preyChase = new PreyChaseState(this);
@@ -230,19 +390,34 @@ public class EnemyAI : MonoBehaviour
             StateMachine.AllowState(flee);
             StateMachine.AllowState(follow);
         }
-        else
+        else if (IsBigDino)
         {
+            // Dino grande: patrulla y caza (no huye de otros dinosaurios)
             PatrolState predPatrol = new PatrolState(this);
             ChaseState predChase = new ChaseState(this);
-            FleeState flee = new FleeState(this);
 
             PatrolState = predPatrol;
             ChaseState = predChase;
-            FleeState = flee;
+            FleeState = null;
             FollowLeaderState = null;
 
             StateMachine.AllowState(predPatrol);
             StateMachine.AllowState(predChase);
+        }
+        else
+        {
+            // Dino mediano: patrulla, caza (jugador y pequeños) y huye (del grande)
+            PatrolState medPatrol = new PatrolState(this);
+            ChaseState medChase = new ChaseState(this);
+            FleeState flee = new FleeState(this);
+
+            PatrolState = medPatrol;
+            ChaseState = medChase;
+            FleeState = flee;
+            FollowLeaderState = null;
+
+            StateMachine.AllowState(medPatrol);
+            StateMachine.AllowState(medChase);
             StateMachine.AllowState(flee);
         }
     }
@@ -250,6 +425,12 @@ public class EnemyAI : MonoBehaviour
     protected virtual void Start()
     {
         EnsurePlayerReference();
+
+        if (dinoEmboscador)
+        {
+            AmbushHomePos = transform.position;
+            AmbushHomeRot = transform.rotation;
+        }
 
         if (IsSmallDino)
         {
@@ -265,8 +446,9 @@ public class EnemyAI : MonoBehaviour
                     }
                 }
             }
-            else if (isLeader)
+            else if (isLeader && (packFollowers == null || packFollowers.Count == 0))
             {
+                isLeader = false;
                 LeaderAI = null;
             }
         }
@@ -285,7 +467,11 @@ public class EnemyAI : MonoBehaviour
 
         SetVisualState(DinoVisualState.Normal);
 
-        if (IsSmallDino && LeaderAI != null && LeaderAI.gameObject.activeInHierarchy && FollowLeaderState != null)
+        if (dinoEmboscador && AmbushHiddenState != null)
+        {
+            StateMachine.Initialize(AmbushHiddenState);
+        }
+        else if (IsSmallDino && LeaderAI != null && LeaderAI.gameObject.activeInHierarchy && FollowLeaderState != null)
         {
             StateMachine.Initialize(FollowLeaderState);
         }
@@ -303,15 +489,26 @@ public class EnemyAI : MonoBehaviour
         {
             if (Input.GetKeyDown(KeyCode.R))
             {
-                GlobalPlayerDead = false;
-                hasDistributedPrey = false;
-                Time.timeScale = 1f;
-                SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+                RestartGame();
             }
             return;
         }
 
+        if (dinoEmboscador)
+        {
+            if (StateMachine != null &&
+                StateMachine.CurrentState != AmbushRecoverState &&
+                StateMachine.CurrentState != AmbushHiddenState &&
+                StateMachine.CurrentState != AmbushStalkState &&
+                StateMachine.CurrentState != ChaseState &&
+                StateMachine.CurrentState != FleeState)
+            {
+                StateMachine.ChangeState(AmbushRecoverState);
+            }
+        }
+
         StateMachine.Update();
+        SyncVisualStateWithCurrentState();
     }
 
     public void EnsurePlayerReference()
@@ -327,58 +524,153 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
+    public DinoVisualState CurrentVisualState { get; private set; } = DinoVisualState.Normal;
+
+    public Renderer[] GetDinoRenderers()
+    {
+        if (dinoRenderers == null || dinoRenderers.Length == 0)
+        {
+            List<Renderer> valid = new List<Renderer>();
+            Renderer[] all = GetComponentsInChildren<Renderer>(true);
+            for (int i = 0; i < all.Length; i++)
+            {
+                Renderer r = all[i];
+                if (r == null) continue;
+                string n = r.gameObject.name;
+                if (n.IndexOf("trigger", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    n.IndexOf("sound", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+                    n.IndexOf("sphere", System.StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    continue;
+                }
+                valid.Add(r);
+            }
+            dinoRenderers = valid.ToArray();
+        }
+        return dinoRenderers;
+    }
+
     public void SetVisualState(DinoVisualState state)
     {
-        if (dinoRenderers == null || dinoRenderers.Length == 0) dinoRenderers = GetComponentsInChildren<Renderer>(true);
+        CurrentVisualState = state;
+        Renderer[] renderers = GetDinoRenderers();
+        if (renderers == null || renderers.Length == 0) return;
         if (propBlock == null) propBlock = new MaterialPropertyBlock();
 
-        Color targetColor = Color.white;
-        Color targetEmission = Color.black;
+        if (state == DinoVisualState.Normal)
+        {
+            for (int i = 0; i < renderers.Length; i++)
+            {
+                Renderer rend = renderers[i];
+                if (rend == null) continue;
+                rend.SetPropertyBlock(null);
 
-        if (state == DinoVisualState.Chasing)
-        {
-            targetColor = new Color(1f, 0.12f, 0.12f, 1f);
-            targetEmission = new Color(0.9f, 0.05f, 0.05f, 1f);
-        }
-        else if (state == DinoVisualState.Fleeing)
-        {
-            targetColor = new Color(0.15f, 0.55f, 1f, 1f);
-            targetEmission = new Color(0.05f, 0.45f, 1f, 1f);
-        }
-        else if (state == DinoVisualState.Alert)
-        {
-            targetColor = new Color(0.6f, 0.1f, 0.9f, 1f);
-            targetEmission = new Color(0.5f, 0.05f, 0.8f, 1f);
+                Material sharedMat = rend.sharedMaterial;
+                if (sharedMat != null && sharedMat.HasProperty(EmissionColorId))
+                {
+                    sharedMat.DisableKeyword("_EMISSION");
+                }
+            }
+            return;
         }
 
-        foreach (var rend in dinoRenderers)
+        Color targetColor;
+        Color targetEmission;
+
+        switch (state)
         {
+            case DinoVisualState.Chasing:
+                targetColor = new Color(0.95f, 0.10f, 0.10f, 1f);
+                targetEmission = new Color(1f, 0.08f, 0.08f, 1f) * 1.5f;
+                break;
+
+            case DinoVisualState.Fleeing:
+                targetColor = new Color(0.12f, 0.58f, 1f, 1f);
+                targetEmission = new Color(0.08f, 0.55f, 1f, 1f) * 1.5f;
+                break;
+
+            case DinoVisualState.Alert:
+                targetColor = new Color(1f, 0.85f, 0.08f, 1f);
+                targetEmission = new Color(1f, 0.80f, 0.05f, 1f) * 1.3f;
+                break;
+
+            case DinoVisualState.Alarm:
+                targetColor = new Color(1f, 0.12f, 0.85f, 1f);
+                targetEmission = new Color(1f, 0.08f, 0.85f, 1f) * 1.5f;
+                break;
+
+            case DinoVisualState.Stalking:
+                targetColor = new Color(1f, 0.50f, 0.05f, 1f);
+                targetEmission = new Color(1f, 0.45f, 0.05f, 1f) * 1.3f;
+                break;
+
+            case DinoVisualState.Tired:
+                targetColor = new Color(0.50f, 0.52f, 0.58f, 1f);
+                targetEmission = Color.black;
+                break;
+
+            default:
+                targetColor = Color.white;
+                targetEmission = Color.black;
+                break;
+        }
+
+        for (int i = 0; i < renderers.Length; i++)
+        {
+            Renderer rend = renderers[i];
             if (rend == null) continue;
-            rend.GetPropertyBlock(propBlock);
+
+            propBlock.Clear();
             propBlock.SetColor(BaseColorId, targetColor);
             propBlock.SetColor(ColorId, targetColor);
-            propBlock.SetColor(EmissionColorId, targetEmission);
+            if (targetEmission != Color.black)
+            {
+                propBlock.SetColor(EmissionColorId, targetEmission);
+            }
             rend.SetPropertyBlock(propBlock);
 
-            if (rend.material != null)
+            Material sharedMat = rend.sharedMaterial;
+            if (sharedMat != null && sharedMat.HasProperty(EmissionColorId))
             {
-                if (rend.material.HasProperty(BaseColorId)) rend.material.SetColor(BaseColorId, targetColor);
-                if (rend.material.HasProperty(ColorId)) rend.material.SetColor(ColorId, targetColor);
-                if (rend.material.HasProperty(EmissionColorId))
+                if (targetEmission != Color.black)
                 {
-                    rend.material.SetColor(EmissionColorId, targetEmission);
-                    if (state != DinoVisualState.Normal) rend.material.EnableKeyword("_EMISSION");
-                    else rend.material.DisableKeyword("_EMISSION");
+                    sharedMat.EnableKeyword("_EMISSION");
+                }
+                else
+                {
+                    sharedMat.DisableKeyword("_EMISSION");
                 }
             }
         }
     }
 
+    public virtual DinoVisualState DetermineVisualState(IState state)
+    {
+        if (state == null) return DinoVisualState.Normal;
+        if (state is ChaseState) return DinoVisualState.Chasing;
+        if (state is FleeState) return DinoVisualState.Fleeing;
+        if (state is AlarmState) return DinoVisualState.Alarm;
+        if (state is BlindInvestigateState) return DinoVisualState.Alert;
+        if (state is AmbushStalkState) return DinoVisualState.Stalking;
+        if (state is AmbushRecoverState) return DinoVisualState.Tired;
+        return DinoVisualState.Normal;
+    }
+
+    public void SyncVisualStateWithCurrentState()
+    {
+        if (StateMachine == null || StateMachine.CurrentState == null) return;
+        DinoVisualState expected = DetermineVisualState(StateMachine.CurrentState);
+        if (expected != CurrentVisualState)
+        {
+            SetVisualState(expected);
+        }
+    }
+
     public void SetChasingVisuals(bool isChasing) => SetVisualState(isChasing ? DinoVisualState.Chasing : DinoVisualState.Normal);
-
     public void SetFleeingVisuals(bool isFleeing) => SetVisualState(isFleeing ? DinoVisualState.Fleeing : DinoVisualState.Normal);
-
     public void SetAlertVisuals(bool isAlert) => SetVisualState(isAlert ? DinoVisualState.Alert : DinoVisualState.Normal);
+    public void SetAlarmVisuals(bool isAlarm) => SetVisualState(isAlarm ? DinoVisualState.Alarm : DinoVisualState.Normal);
+    public void SetStalkingVisuals(bool isStalking) => SetVisualState(isStalking ? DinoVisualState.Stalking : DinoVisualState.Normal);
 
     public bool MutuallySees(EnemyAI other)
     {
@@ -430,7 +722,7 @@ public class EnemyAI : MonoBehaviour
     {
         if (leaderA == null || leaderB == null || leaderA == leaderB) return;
         if (!leaderA.gameObject.activeInHierarchy || !leaderB.gameObject.activeInHierarchy) return;
-        if (leaderA.IsBigDino || leaderB.IsBigDino) return;
+        if (!leaderA.IsSmallDino || !leaderB.IsSmallDino) return;
 
         bool aWins = (Random.value < 0.5f);
         EnemyAI winner = aWins ? leaderA : leaderB;
@@ -460,35 +752,40 @@ public class EnemyAI : MonoBehaviour
     public virtual void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
         if (target == null) return;
-        if (IsPriorityChaseActive && targetDino != null) return; // Si la persecución prioritaria está activa, ignora presas
-        if (this is BlindEnemyAI)
+        if (IsPriorityChaseActive && targetDino != null) return;
+        if (this is BlindEnemyAI || this is AmbushEnemyAI || dinoEmboscador)
         {
-            if (targetDino != null && targetDino.IsSmallDino) return;
-            if (target.GetComponentInParent<EnemyAI>()?.IsSmallDino == true) return;
+            if (targetDino != null) return;
+            if (target.GetComponentInParent<EnemyAI>() != null) return;
+        }
+
+        // Jerarquía de caza:
+        if (targetDino != null)
+        {
+            // Pequeño no caza otros dinosaurios
+            if (IsSmallDino) return;
+            // Mediano solo caza pequeños
+            if (IsMediumDino && !targetDino.IsSmallDino) return;
+            // Grande solo caza medianos
+            if (IsBigDino && !targetDino.IsMediumDino) return;
         }
 
         CurrentChaseTarget = target;
         TargetDino = targetDino;
 
-        if (targetDino != null && targetDino.gameObject.activeInHierarchy)
+        if (targetDino != null && targetDino.gameObject.activeInHierarchy && this is not BlindEnemyAI && this is not AmbushEnemyAI && !dinoEmboscador)
         {
-            if (!(this is BlindEnemyAI))
-            {
-                targetDino.NotifyPackFlee(this);
-            }
+            targetDino.NotifyPackFlee(this);
         }
 
         if (StateMachine != null && ChaseState != null)
         {
-            if (StateMachine.CurrentState != ChaseState) StateMachine.ChangeState(ChaseState);
+            if (StateMachine.CurrentState != ChaseState &&
+                StateMachine.CurrentState != FleeState) StateMachine.ChangeState(ChaseState);
             else ChaseState.Enter();
         }
     }
 
-    /// <summary>
-    /// Inicia el estado de persecución prioritario inducido por la alarma de un avisador.
-    /// Este estado adquiere prioridad máxima (100) en la StateMachine y no puede ser interrumpido por huida, patrulla o distracciones.
-    /// </summary>
     public virtual void TriggerAlarmChase(Transform target, Vector3 targetPos)
     {
         if (target == null) return;
@@ -504,7 +801,6 @@ public class EnemyAI : MonoBehaviour
             blind.LastSoundSource = target;
         }
 
-        // Si es presa pequeña con manada, activar la prioridad en toda la manada
         if (IsSmallDino)
         {
             if (packFollowers != null)
@@ -526,7 +822,8 @@ public class EnemyAI : MonoBehaviour
 
         if (StateMachine != null && ChaseState != null)
         {
-            if (StateMachine.CurrentState != ChaseState)
+            if (StateMachine.CurrentState != ChaseState &&
+                StateMachine.CurrentState != FleeState)
             {
                 StateMachine.ChangeState(ChaseState, force: true);
             }
@@ -545,13 +842,18 @@ public class EnemyAI : MonoBehaviour
 
     public virtual void TriggerFlee(EnemyAI threat)
     {
-        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad sobre huir
-        // Los dinosaurios grandes son depredadores dominantes y nunca huyen de otros dinosaurios
-        if (IsBigDino) return;
+        if (this is BlindEnemyAI || dinoCiego) return;
+        if (IsPriorityChaseActive) return;
+        if (IsBigDino) return; // El dinosaurio grande nunca huye de otros dinosaurios
         if (threat == null || threat == this) return;
-        if (threat is BlindEnemyAI) return; // Los pequeños no huyen de los ciegos
+        if (threat is BlindEnemyAI || threat is AmbushEnemyAI || threat.dinoEmboscador) return;
         if (threat == LeaderAI || threat.EffectiveLeader == EffectiveLeader) return;
-        if (threat.IsPrey || threat is SmallEnemyAI) return;
+
+        // Jerarquía de huida:
+        // Mediano solo huye del Grande
+        if (IsMediumDino && !threat.IsBigDino) return;
+        // Pequeño huye de Mediano y de Grande
+        if (IsSmallDino && !threat.IsMediumDino && !threat.IsBigDino) return;
 
         CurrentThreat = threat.transform;
         ChasingPredator = threat;
@@ -562,22 +864,20 @@ public class EnemyAI : MonoBehaviour
         }
     }
 
-    /// <summary>
-    /// Retorna el ángulo en grados del cono de visión o del campo frontal sensible a la luz.
-    /// </summary>
     public virtual float GetVisionOrFacingCone()
     {
         if (visionAngle > 0f) return visionAngle;
-        return IsSmallDino ? 280f : 110f;
+        return IsSmallDino ? 260f : 110f;
     }
 
-    /// <summary>
-    /// Hace que el dinosaurio huya despavorido del jugador si este enciende y apaga la linterna
-    /// apuntándole dentro de su cono de visión.
-    /// </summary>
     public virtual void TriggerScaredByLight(Transform threatPlayer)
     {
-        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad absoluta
+        if (this is BlindEnemyAI || dinoCiego) return;
+        isPriorityChase = false;
+        TargetDino = null;
+        CurrentChaseTarget = null;
+        if (StateMachine != null && StateMachine.CurrentState == FleeState) return;
+
         if (threatPlayer == null) EnsurePlayerReference();
         Transform threat = threatPlayer != null ? threatPlayer : Player;
         if (threat == null) return;
@@ -589,19 +889,19 @@ public class EnemyAI : MonoBehaviour
 
         if (StateMachine != null && FleeState != null)
         {
-            if (StateMachine.CurrentState != FleeState)
-            {
-                StateMachine.ChangeState(FleeState);
-            }
-            else
-            {
-                FleeState.Enter();
-            }
+            StateMachine.ChangeState(FleeState);
         }
 
-        // Si es dinosaurio pequeño / presa, alertar a la manada
         if (IsSmallDino)
         {
+            if (LeaderAI != null && LeaderAI.gameObject.activeInHierarchy && LeaderAI != this)
+            {
+                if (LeaderAI.StateMachine != null && LeaderAI.StateMachine.CurrentState != LeaderAI.FleeState)
+                {
+                    LeaderAI.TriggerScaredByLight(threat);
+                }
+            }
+
             if (packFollowers != null)
             {
                 for (int i = 0; i < packFollowers.Count; i++)
@@ -609,20 +909,19 @@ public class EnemyAI : MonoBehaviour
                     EnemyAI follower = packFollowers[i];
                     if (follower != null && follower.gameObject.activeInHierarchy && follower != this)
                     {
-                        follower.TriggerScaredByLight(threat);
+                        if (follower.StateMachine != null && follower.StateMachine.CurrentState != follower.FleeState)
+                        {
+                            follower.TriggerScaredByLight(threat);
+                        }
                     }
                 }
-            }
-            if (LeaderAI != null && LeaderAI.gameObject.activeInHierarchy && LeaderAI != this)
-            {
-                LeaderAI.TriggerScaredByLight(threat);
             }
         }
     }
 
     public virtual void TriggerPatrol()
     {
-        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad sobre patrullar
+        if (IsPriorityChaseActive) return;
         CurrentChaseTarget = null;
         TargetDino = null;
         CurrentThreat = null;
@@ -630,6 +929,12 @@ public class EnemyAI : MonoBehaviour
         SpottedThreatPosition = Vector3.zero;
 
         if (StateMachine == null) return;
+
+        if (dinoEmboscador && AmbushRecoverState != null)
+        {
+            if (StateMachine.CurrentState != AmbushRecoverState) StateMachine.ChangeState(AmbushRecoverState);
+            return;
+        }
 
         if (IsSmallDino && LeaderAI != null && LeaderAI.gameObject.activeInHierarchy && FollowLeaderState != null)
         {
@@ -671,12 +976,15 @@ public class EnemyAI : MonoBehaviour
 
     public void NotifyPackChase(Transform target) => NotifyPackAttack(target);
 
-    public void NotifyPackFlee(EnemyAI threat)
+    public virtual void NotifyPackFlee(EnemyAI threat)
     {
+        if (this is BlindEnemyAI || dinoCiego) return;
+        if (IsBigDino) return;
         if (threat == null || threat == this) return;
-        if (threat is BlindEnemyAI) return; // Los pequeños no huyen de los ciegos
+        if (threat is BlindEnemyAI || threat is AmbushEnemyAI || threat.dinoEmboscador) return;
         if (threat == LeaderAI || threat.EffectiveLeader == EffectiveLeader) return;
-        if (threat.IsPrey || threat is SmallEnemyAI) return;
+        if (IsMediumDino && !threat.IsBigDino) return;
+        if (IsSmallDino && !threat.IsMediumDino && !threat.IsBigDino) return;
 
         TriggerFlee(threat);
 
@@ -708,7 +1016,7 @@ public class EnemyAI : MonoBehaviour
     {
         if (predator != null)
         {
-            if (predator is BlindEnemyAI) return;
+            if (predator is BlindEnemyAI || predator is AmbushEnemyAI || predator.dinoEmboscador) return;
             NotifyPackFlee(predator);
         }
         else if (threat != null)
@@ -716,7 +1024,7 @@ public class EnemyAI : MonoBehaviour
             EnemyAI threatAI = threat.GetComponentInParent<EnemyAI>();
             if (threatAI != null)
             {
-                if (threatAI is BlindEnemyAI) return;
+                if (threatAI is BlindEnemyAI || threatAI is AmbushEnemyAI || threatAI.dinoEmboscador) return;
                 NotifyPackFlee(threatAI);
             }
         }
@@ -773,49 +1081,109 @@ public class EnemyAI : MonoBehaviour
         return true;
     }
 
-    public virtual bool CanSeeBigDino(out EnemyAI spottedPredator)
+    public virtual bool CanSeeThreat(out EnemyAI spottedThreat)
     {
-        spottedPredator = null;
-        if (IsBigDino) return false;
+        spottedThreat = null;
+        if (IsBigDino || this is BlindEnemyAI || dinoCiego) return false;
 
-        for (int i = 0; i < AllPredators.Count; i++)
+        // 1. Dinosaurio Mediano: huye del dinosaurio Grande (T-Rex)
+        if (IsMediumDino)
         {
-            EnemyAI predator = AllPredators[i];
-            if (predator == null || !predator.gameObject.activeInHierarchy || predator == this) continue;
-            if (predator == LeaderAI || predator.EffectiveLeader == EffectiveLeader) continue;
-            if (predator.IsPrey || predator is SmallEnemyAI || predator is BlindEnemyAI) continue;
-
-            if (CanSeeSpecificDino(predator))
+            for (int i = 0; i < AllBigDinos.Count; i++)
             {
-                spottedPredator = predator;
-                return true;
+                EnemyAI big = AllBigDinos[i];
+                if (big == null || !big.gameObject.activeInHierarchy || big == this) continue;
+                if (big is BlindEnemyAI || big is AmbushEnemyAI || big.dinoEmboscador) continue;
+
+                if (CanSeeSpecificDino(big))
+                {
+                    spottedThreat = big;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // 2. Dinosaurio Pequeño: huye de Medianos y de Grandes
+        if (IsSmallDino)
+        {
+            // Primero evaluar si hay dinosaurios Grandes en visión
+            for (int i = 0; i < AllBigDinos.Count; i++)
+            {
+                EnemyAI big = AllBigDinos[i];
+                if (big == null || !big.gameObject.activeInHierarchy || big == this) continue;
+                if (big is BlindEnemyAI || big is AmbushEnemyAI || big.dinoEmboscador) continue;
+
+                if (CanSeeSpecificDino(big))
+                {
+                    spottedThreat = big;
+                    return true;
+                }
+            }
+
+            // Luego evaluar si hay dinosaurios Medianos en visión
+            for (int i = 0; i < AllMediumDinos.Count; i++)
+            {
+                EnemyAI med = AllMediumDinos[i];
+                if (med == null || !med.gameObject.activeInHierarchy || med == this) continue;
+                if (med is BlindEnemyAI || med is AmbushEnemyAI || med.dinoEmboscador) continue;
+
+                if (CanSeeSpecificDino(med))
+                {
+                    spottedThreat = med;
+                    return true;
+                }
             }
         }
 
         return false;
     }
 
-    public virtual bool CanSeePrey(out EnemyAI spottedPrey)
+    public virtual bool CanSeeHuntablePrey(out EnemyAI spottedPrey)
     {
         spottedPrey = null;
-        if (IsSmallDino) return false;
+        if (IsSmallDino || this is BlindEnemyAI || this is AmbushEnemyAI || dinoEmboscador) return false;
 
-        for (int i = 0; i < AllPrey.Count; i++)
+        // 1. Dinosaurio Grande: caza dinosaurios Medianos
+        if (IsBigDino)
         {
-            EnemyAI prey = AllPrey[i];
-            if (prey == null || !prey.gameObject.activeInHierarchy || prey == this) continue;
-            if (prey == LeaderAI || prey.EffectiveLeader == EffectiveLeader) continue;
-            if (!prey.IsPrey && !(prey is SmallEnemyAI)) continue;
-
-            if (CanSeeSpecificDino(prey))
+            for (int i = 0; i < AllMediumDinos.Count; i++)
             {
-                spottedPrey = prey;
-                return true;
+                EnemyAI med = AllMediumDinos[i];
+                if (med == null || !med.gameObject.activeInHierarchy || med == this) continue;
+                if (med is BlindEnemyAI || med is AmbushEnemyAI || med.dinoEmboscador) continue;
+
+                if (CanSeeSpecificDino(med))
+                {
+                    spottedPrey = med;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // 2. Dinosaurio Mediano: caza dinosaurios Pequeños
+        if (IsMediumDino)
+        {
+            for (int i = 0; i < AllSmallDinos.Count; i++)
+            {
+                EnemyAI small = AllSmallDinos[i];
+                if (small == null || !small.gameObject.activeInHierarchy || small == this) continue;
+                if (small is BlindEnemyAI || small is AmbushEnemyAI || small.dinoEmboscador) continue;
+
+                if (CanSeeSpecificDino(small))
+                {
+                    spottedPrey = small;
+                    return true;
+                }
             }
         }
 
         return false;
     }
+
+    public virtual bool CanSeeBigDino(out EnemyAI spottedPredator) => CanSeeThreat(out spottedPredator);
+    public virtual bool CanSeePrey(out EnemyAI spottedPrey) => CanSeeHuntablePrey(out spottedPrey);
 
     public virtual void Die()
     {
@@ -853,8 +1221,9 @@ public class EnemyAI : MonoBehaviour
         }
 
         AllEnemies.Remove(this);
-        AllPrey.Remove(this);
-        AllPredators.Remove(this);
+        AllSmallDinos.Remove(this);
+        AllMediumDinos.Remove(this);
+        AllBigDinos.Remove(this);
         gameObject.SetActive(false);
     }
 
@@ -867,6 +1236,64 @@ public class EnemyAI : MonoBehaviour
         Time.timeScale = 0f;
         Cursor.lockState = CursorLockMode.None;
         Cursor.visible = true;
+
+        // 1. Quitar el sonido y silenciar todo el audio del juego
+        AudioListener.pause = true;
+        AudioListener.volume = 0f;
+
+        AudioSource[] allAudio = Object.FindObjectsByType<AudioSource>(FindObjectsSortMode.None);
+        for (int i = 0; i < allAudio.Length; i++)
+        {
+            if (allAudio[i] != null && allAudio[i].isPlaying)
+            {
+                allAudio[i].Stop();
+            }
+        }
+
+        // 2. Bloquear el movimiento de la cámara
+        FirstPersonLook.IsCameraLocked = true;
+
+        // 3. Forzar soltar cualquier objeto que se estuviese sosteniendo
+        PickUpScript pickup = Object.FindAnyObjectByType<PickUpScript>();
+        if (pickup != null && pickup.IsHoldingObject)
+        {
+            pickup.ForceRelease();
+        }
+    }
+
+    public static void RestartGame()
+    {
+        ResetGlobalState();
+        string activeScene = SceneManager.GetActiveScene().name;
+        SceneManager.LoadScene(activeScene);
+    }
+
+    public static void ResetGlobalState()
+    {
+        GlobalPlayerDead = false;
+        KillerDino = null;
+        hasDistributedPrey = false;
+        AllEnemies.Clear();
+        AllSmallDinos.Clear();
+        AllMediumDinos.Clear();
+        AllBigDinos.Clear();
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+
+        // Restaurar sonido y desbloquear cámara
+        AudioListener.pause = false;
+        AudioListener.volume = 1f;
+        FirstPersonLook.IsCameraLocked = false;
+    }
+
+    protected virtual void OnDestroy()
+    {
+        AllEnemies.Remove(this);
+        AllSmallDinos.Remove(this);
+        AllMediumDinos.Remove(this);
+        AllBigDinos.Remove(this);
+        if (KillerDino == this) KillerDino = null;
     }
 
     public bool PackCanSeePlayer(out Vector3 targetPos)
@@ -938,11 +1365,23 @@ public class EnemyAI : MonoBehaviour
         Vector3 rayDir = targetPos - eyePos;
         float rayDist = rayDir.magnitude;
 
-        RaycastHit[] hits = Physics.RaycastAll(eyePos, rayDir.normalized, rayDist, ~0, QueryTriggerInteraction.Ignore);
-        System.Array.Sort(hits, (a, b) => a.distance.CompareTo(b.distance));
-
-        foreach (var hit in hits)
+        int hitCount = Physics.RaycastNonAlloc(eyePos, rayDir.normalized, visionRaycastHits, rayDist, ~0, QueryTriggerInteraction.Ignore);
+        for (int i = 0; i < hitCount - 1; i++)
         {
+            for (int j = i + 1; j < hitCount; j++)
+            {
+                if (visionRaycastHits[j].distance < visionRaycastHits[i].distance)
+                {
+                    RaycastHit temp = visionRaycastHits[i];
+                    visionRaycastHits[i] = visionRaycastHits[j];
+                    visionRaycastHits[j] = temp;
+                }
+            }
+        }
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            RaycastHit hit = visionRaycastHits[i];
             if (hit.transform == transform || hit.transform.IsChildOf(transform)) continue;
             bool isOtherEnemy = hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null;
             if (isOtherEnemy) continue;

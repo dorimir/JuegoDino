@@ -8,11 +8,10 @@ public class PreyChaseState : ChaseState
 
     public override void Update()
     {
-        // En persecución prioritaria inducida por alarma, las presas/raptores NO huyen de los dinosaurios grandes;
-        // mantienen el foco absoluto en cazar al jugador
-        if (!ai.IsPriorityChaseActive && ai.CanSeeBigDino(out EnemyAI bigDino) && !(bigDino is BlindEnemyAI))
+        // El dinosaurio pequeño huye si ve a un dinosaurio mediano o grande
+        if (!ai.IsPriorityChaseActive && ai.CanSeeThreat(out EnemyAI threat))
         {
-            ai.NotifyPackFlee(bigDino);
+            ai.NotifyPackFlee(threat);
             return;
         }
 

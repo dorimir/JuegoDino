@@ -1,20 +1,20 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class PickUpScript : MonoBehaviour
 {
     [Header("Referencias")]
     public Transform holdPos;
 
-    [Header("Coger / lanzar")]
+    [Header("Coger / Lanzar")]
     public float pickUpRange = 5f;
     public float throwForce = 15f;
 
-    [Header("Suavizado de posición")]
+    [Header("Suavizado de PosiciÃ³n")]
     public float positionSmoothTime = 0.12f;
     public float maxFollowSpeed = 15f;
     public float maxLag = 0.4f;
 
-    [Header("Rotación")]
+    [Header("RotaciÃ³n")]
     public float rotationSmoothness = 8f;
     public float rotationSensitivity = 3f;
 
@@ -26,7 +26,7 @@ public class PickUpScript : MonoBehaviour
     private Linterna heldLinterna;
 
     private GameObject hoveredObj;
-    private string hoveredObjName = "";
+    private string hoveredObjName = string.Empty;
 
     public GameObject HeldObj => heldObj;
     public GameObject HoveredObj => hoveredObj;
@@ -42,43 +42,41 @@ public class PickUpScript : MonoBehaviour
     private Vector3 moveVelocity;
     private Quaternion localRotation;
 
-    void Start()
+    private static GUIStyle hudPromptStyle;
+    private static Texture2D hudBgTex;
+
+    private void Start()
     {
         holdLayer = LayerMask.NameToLayer("holdLayer");
     }
 
-    void Update()
+    private void Update()
     {
         if (Input.GetKeyDown(KeyCode.E))
         {
             if (heldObj == null)
+            {
                 TryPickUp();
+            }
             else
+            {
                 Release();
+            }
         }
 
         if (heldObj == null)
         {
-            RaycastHit hit;
-            if (Physics.Raycast(transform.position, transform.forward, out hit, pickUpRange))
+            if (Physics.Raycast(transform.position, transform.forward, out RaycastHit hit, pickUpRange) && hit.transform.CompareTag("canPickUp"))
             {
-                if (hit.transform.CompareTag("canPickUp"))
+                hoveredObj = hit.transform.gameObject;
+                if (hoveredObj.TryGetComponent<PickupPrompt>(out var prompt) && !string.IsNullOrEmpty(prompt.objectDisplayName))
                 {
-                    hoveredObj = hit.transform.gameObject;
-                    PickupPrompt prompt = hoveredObj.GetComponent<PickupPrompt>();
-                    if (prompt != null && !string.IsNullOrEmpty(prompt.objectDisplayName))
-                    {
-                        hoveredObjName = prompt.objectDisplayName;
-                    }
-                    else
-                    {
-                        string n = hoveredObj.name.Replace("(Clone)", "").Trim();
-                        hoveredObjName = n.ToLower().Contains("linterna") ? "Linterna" : n;
-                    }
+                    hoveredObjName = prompt.objectDisplayName;
                 }
                 else
                 {
-                    hoveredObj = null;
+                    string cleanName = hoveredObj.name.Replace("(Clone)", "").Trim();
+                    hoveredObjName = cleanName.ToLower().Contains("linterna") ? "Linterna" : cleanName;
                 }
             }
             else
@@ -90,91 +88,93 @@ public class PickUpScript : MonoBehaviour
 
         hoveredObj = null;
 
-        // La linterna no se rota a mano
         if (heldLinterna == null && Input.GetKey(KeyCode.R))
         {
-            float x = Input.GetAxis("Mouse X") * rotationSensitivity;
-            float y = Input.GetAxis("Mouse Y") * rotationSensitivity;
+            float mouseX = Input.GetAxis("Mouse X") * rotationSensitivity;
+            float mouseY = Input.GetAxis("Mouse Y") * rotationSensitivity;
 
-            localRotation =
-                Quaternion.AngleAxis(-x, Vector3.up) *
-                Quaternion.AngleAxis(y, Vector3.right) *
-                localRotation;
+            localRotation = Quaternion.AngleAxis(-mouseX, Vector3.up) *
+                            Quaternion.AngleAxis(mouseY, Vector3.right) *
+                            localRotation;
         }
 
-        if (heldLinterna != null)
+        bool shouldThrow = Input.GetKeyDown(KeyCode.F) || (heldLinterna == null && Input.GetKeyDown(KeyCode.Mouse0));
+        if (shouldThrow)
         {
-            // La linterna se enciende con Clic Izquierdo (en Linterna.cs) y se lanza con F
-            if (Input.GetKeyDown(KeyCode.F))
-                Throw();
-        }
-        else
-        {
-            // Para otros objetos, se lanza con F o Clic Izquierdo
-            if (Input.GetKeyDown(KeyCode.F) || Input.GetKeyDown(KeyCode.Mouse0))
-                Throw();
+            Throw();
         }
     }
 
-    void LateUpdate()
+    private void LateUpdate()
     {
-        if (heldObj == null)
-            return;
+        if (heldObj == null) return;
 
-        Transform t = heldObj.transform;
+        Transform objTransform = heldObj.transform;
 
-        Vector3 pos = Vector3.SmoothDamp(
-            t.position,
-            holdPos.position,
+        Vector3 targetHoldPosition;
+        Quaternion baseHoldRotation;
+
+        if (heldLinterna != null)
+        {
+            Transform camTransform = (holdPos != null && holdPos.parent != null)
+                ? holdPos.parent
+                : (Camera.main != null ? Camera.main.transform : transform);
+
+            targetHoldPosition = camTransform.TransformPoint(heldLinterna.offsetEnMano);
+            baseHoldRotation = camTransform.rotation;
+        }
+        else
+        {
+            targetHoldPosition = holdPos != null ? holdPos.position : transform.position + transform.forward * 1.5f;
+            baseHoldRotation = holdPos != null ? holdPos.rotation : transform.rotation;
+        }
+
+        Vector3 targetPosition = Vector3.SmoothDamp(
+            objTransform.position,
+            targetHoldPosition,
             ref moveVelocity,
             positionSmoothTime,
             maxFollowSpeed
         );
 
-        Vector3 offset = pos - holdPos.position;
+        Vector3 offset = targetPosition - targetHoldPosition;
         if (offset.magnitude > maxLag)
-            pos = holdPos.position + offset.normalized * maxLag;
+        {
+            targetPosition = targetHoldPosition + offset.normalized * maxLag;
+        }
 
-        t.position = pos;
+        objTransform.position = targetPosition;
 
-        Quaternion targetRot = heldLinterna != null
-            ? heldLinterna.RotacionEnMano(holdPos.rotation)
-            : holdPos.rotation * localRotation;
+        Quaternion targetRotation = (heldLinterna != null)
+            ? heldLinterna.RotacionEnMano(baseHoldRotation)
+            : baseHoldRotation * localRotation;
 
-        float k = 1f - Mathf.Exp(-rotationSmoothness * Time.deltaTime);
-        t.rotation = Quaternion.Slerp(t.rotation, targetRot, k);
+        float smoothFactor = 1f - Mathf.Exp(-rotationSmoothness * Time.deltaTime);
+        objTransform.rotation = Quaternion.Slerp(objTransform.rotation, targetRotation, smoothFactor);
     }
 
-    void TryPickUp()
+    private void TryPickUp()
     {
-        RaycastHit hit;
-
-        if (Physics.Raycast(transform.position, transform.forward, out hit, pickUpRange))
+        if (Physics.Raycast(transform.position, transform.forward, out RaycastHit hit, pickUpRange) && hit.transform.CompareTag("canPickUp"))
         {
-            if (hit.transform.CompareTag("canPickUp"))
-                PickUp(hit.transform.gameObject);
+            PickUp(hit.transform.gameObject);
         }
     }
 
-    void PickUp(GameObject obj)
+    private void PickUp(GameObject obj)
     {
-        Rigidbody rb = obj.GetComponent<Rigidbody>();
-        if (rb == null)
-        {
-            Debug.LogError("[PICKUP] " + obj.name + " no tiene Rigidbody");
-            return;
-        }
+        if (!obj.TryGetComponent<Rigidbody>(out var rb)) return;
 
         heldObj = obj;
         heldObjRb = rb;
 
-        heldLinterna = obj.GetComponentInChildren<Linterna>();
-        if (heldLinterna == null) heldLinterna = obj.GetComponentInParent<Linterna>();
+        heldLinterna = obj.GetComponentInChildren<Linterna>() ?? obj.GetComponentInParent<Linterna>();
 
-        RastreoSonoro rs = obj.GetComponentInChildren<RastreoSonoro>();
-        if (rs == null) rs = obj.GetComponentInParent<RastreoSonoro>();
+        RastreoSonoro rs = obj.GetComponentInChildren<RastreoSonoro>() ?? obj.GetComponentInParent<RastreoSonoro>();
         if (rs != null)
+        {
             rs.Recoger();
+        }
 
         originalKinematic = rb.isKinematic;
         originalDetectCollisions = rb.detectCollisions;
@@ -183,7 +183,9 @@ public class PickUpScript : MonoBehaviour
         originalLayers = new int[heldTransforms.Length];
 
         for (int i = 0; i < heldTransforms.Length; i++)
+        {
             originalLayers[i] = heldTransforms[i].gameObject.layer;
+        }
 
         rb.linearVelocity = Vector3.zero;
         rb.angularVelocity = Vector3.zero;
@@ -191,29 +193,39 @@ public class PickUpScript : MonoBehaviour
         rb.detectCollisions = false;
 
         if (holdLayer >= 0)
+        {
             foreach (Transform tr in heldTransforms)
+            {
                 tr.gameObject.layer = holdLayer;
+            }
+        }
 
-        localRotation = Quaternion.Inverse(holdPos.rotation) * obj.transform.rotation;
+        Quaternion holdRot = holdPos != null ? holdPos.rotation : transform.rotation;
+        localRotation = Quaternion.Inverse(holdRot) * obj.transform.rotation;
         moveVelocity = Vector3.zero;
     }
 
-    void Release(bool lanzado = false)
+    private void Release(bool lanzado = false)
     {
-        if (heldObj == null)
-            return;
+        if (heldObj == null) return;
 
         PlaceSafely();
 
         for (int i = 0; i < heldTransforms.Length; i++)
+        {
             if (heldTransforms[i] != null)
+            {
                 heldTransforms[i].gameObject.layer = originalLayers[i];
+            }
+        }
 
-        heldObjRb.isKinematic = originalKinematic;
-        heldObjRb.detectCollisions = originalDetectCollisions;
+        if (heldObjRb != null)
+        {
+            heldObjRb.isKinematic = originalKinematic;
+            heldObjRb.detectCollisions = originalDetectCollisions;
+        }
 
-        RastreoSonoro rs = heldObj.GetComponentInChildren<RastreoSonoro>();
-        if (rs == null) rs = heldObj.GetComponentInParent<RastreoSonoro>();
+        RastreoSonoro rs = heldObj.GetComponentInChildren<RastreoSonoro>() ?? heldObj.GetComponentInParent<RastreoSonoro>();
         if (rs != null)
         {
             if (lanzado) rs.Lanzar();
@@ -227,72 +239,67 @@ public class PickUpScript : MonoBehaviour
         originalLayers = null;
     }
 
-    void Throw()
+    public void ForceRelease()
+    {
+        if (heldObj != null)
+        {
+            Release(false);
+        }
+    }
+
+    private void Throw()
     {
         Rigidbody rb = heldObjRb;
         Release(true);
 
         if (rb != null)
+        {
             rb.AddForce(transform.forward * throwForce, ForceMode.VelocityChange);
+        }
     }
 
-    void PlaceSafely()
+    private void PlaceSafely()
     {
-        int mask = ~0;
-        if (holdLayer >= 0)
-            mask = ~(1 << holdLayer);
-
+        int mask = holdLayer >= 0 ? ~(1 << holdLayer) : ~0;
         Vector3 from = transform.position;
         Vector3 to = heldObj.transform.position;
 
-        RaycastHit hit;
-        if (Physics.Linecast(from, to, out hit, mask, QueryTriggerInteraction.Ignore))
+        if (Physics.Linecast(from, to, out RaycastHit hit, mask, QueryTriggerInteraction.Ignore))
         {
             heldObj.transform.position = hit.point + hit.normal * safeDropMargin;
         }
     }
 
-    private static GUIStyle hudPromptStyle;
-    private static Texture2D hudBgTex;
-
     private void OnGUI()
     {
         InitHUDStyles();
 
-        // 1. Si sostiene un objeto: mostrar controles en la parte inferior
         if (heldObj != null)
         {
-            float w = 460f;
-            float h = 40f;
-            float x = (Screen.width - w) * 0.5f;
+            float width = 460f;
+            float height = 40f;
+            float x = (Screen.width - width) * 0.5f;
             float y = Screen.height - 70f;
-            Rect bgRect = new Rect(x, y, w, h);
+            Rect bgRect = new Rect(x, y, width, height);
 
             Color oldColor = GUI.color;
             GUI.color = new Color(0.06f, 0.08f, 0.12f, 0.88f);
             GUI.DrawTexture(bgRect, hudBgTex != null ? hudBgTex : Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 8f);
             GUI.color = oldColor;
 
-            string promptText;
-            if (heldLinterna != null)
-            {
-                promptText = $"<b><color=#FFD700>[ Clic Izq ]</color></b> Linterna ({(heldLinterna.encendida ? "ON" : "OFF")})  |  <b><color=#FFD700>[ F ]</color></b> Lanzar  |  <b><color=#FFD700>[ E ]</color></b> Soltar";
-            }
-            else
-            {
-                promptText = "<b><color=#FFD700>[ F ]</color></b> Lanzar  |  <b><color=#FFD700>[ E ]</color></b> Soltar  |  <b><color=#FFD700>[ R ]</color></b> Rotar";
-            }
+            string promptText = (heldLinterna != null)
+                ? $"<b><color=#FFD700>[ Clic Izq ]</color></b> Linterna ({(heldLinterna.encendida ? "ON" : "OFF")})  |  <b><color=#FFD700>[ F ]</color></b> Lanzar  |  <b><color=#FFD700>[ E ]</color></b> Soltar"
+                : "<b><color=#FFD700>[ F ]</color></b> Lanzar  |  <b><color=#FFD700>[ E ]</color></b> Soltar  |  <b><color=#FFD700>[ R ]</color></b> Rotar";
 
             GUI.Label(bgRect, promptText, hudPromptStyle);
         }
-        // 2. Si está apuntando a un objeto que se puede recoger con la E:
         else if (hoveredObj != null)
         {
-            float w = 270f;
-            float h = 38f;
-            float x = (Screen.width - w) * 0.5f;
+            float width = 270f;
+            float height = 38f;
+            float x = (Screen.width - width) * 0.5f;
             float y = Screen.height * 0.5f + 40f;
-            Rect bgRect = new Rect(x, y, w, h);
+            Rect bgRect = new Rect(x, y, width, height);
 
             Color oldColor = GUI.color;
             GUI.color = new Color(0.06f, 0.08f, 0.12f, 0.90f);

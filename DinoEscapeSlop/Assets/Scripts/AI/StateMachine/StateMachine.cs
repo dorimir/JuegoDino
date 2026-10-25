@@ -1,5 +1,4 @@
 using System.Collections.Generic;
-using UnityEngine;
 
 public class StateMachine
 {
@@ -19,38 +18,26 @@ public class StateMachine
         }
     }
 
-    public bool IsStateAllowed(IState state)
-    {
-        return state != null && allowedStates.Contains(state);
-    }
+    public bool IsStateAllowed(IState state) => state != null && allowedStates.Contains(state);
 
     public void Initialize(IState startingState)
     {
         if (startingState == null) return;
 
         AllowState(startingState);
-
         CurrentState = startingState;
         CurrentState.Enter();
     }
 
-    public bool ChangeState(IState newState)
-    {
-        return ChangeState(newState, false);
-    }
-
-    public bool ChangeState(IState newState, bool force)
+    public bool ChangeState(IState newState, bool force = false)
     {
         if (newState == null || newState == CurrentState) return false;
 
-        // Validación estricta: Solo se puede transicionar a estados previamente autorizados para esta entidad
         if (allowedStates.Count > 0 && !allowedStates.Contains(newState))
         {
-            Debug.LogWarning($"[StateMachine] Transición denegada: El estado {newState.GetType().Name} no está permitido en esta entidad.");
             return false;
         }
 
-        // Validación de prioridad: Si el estado actual tiene mayor prioridad que el entrante y la transición no es forzada, se deniega
         int currentPriority = CurrentStatePriority;
         int newPriority = (newState is IPriorityState p) ? p.Priority : 0;
 

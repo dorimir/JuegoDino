@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public class FleeState : IState
@@ -23,6 +23,9 @@ public class FleeState : IState
     private float obstacleAvoidCooldown;
     private const float ObstacleAvoidCooldownDuration = 0.25f;
 
+    private float nodeAdvanceCooldown;
+    private const float NodeAdvanceCooldownDuration = 0.45f;
+
     public FleeState(EnemyAI ai)
     {
         this.ai = ai;
@@ -33,6 +36,7 @@ public class FleeState : IState
         outOfRangeTimer = 0f;
         stuckTimer = 0f;
         obstacleAvoidCooldown = 0f;
+        nodeAdvanceCooldown = 0f;
         lastStuckCheckPos = ai.transform.position;
         currentFleeNode = null;
         recentlyVisitedFleeNodes.Clear();
@@ -44,8 +48,19 @@ public class FleeState : IState
         {
             if (triggeringPredator == ai || triggeringPredator == ai.LeaderAI ||
                 triggeringPredator.EffectiveLeader == ai.EffectiveLeader ||
-                triggeringPredator.IsPrey || triggeringPredator is SmallEnemyAI ||
-                (ai.IsSmallDino && triggeringPredator is BlindEnemyAI))
+                (triggeringPredator is BlindEnemyAI || triggeringPredator is AmbushEnemyAI || triggeringPredator.dinoEmboscador))
+            {
+                ai.TriggerPatrol();
+                return;
+            }
+
+            if (ai.IsMediumDino && !triggeringPredator.IsBigDino)
+            {
+                ai.TriggerPatrol();
+                return;
+            }
+
+            if (ai.IsSmallDino && !triggeringPredator.IsMediumDino && !triggeringPredator.IsBigDino)
             {
                 ai.TriggerPatrol();
                 return;
@@ -55,7 +70,7 @@ public class FleeState : IState
         if (triggeringThreat != null && ai.IsSmallDino)
         {
             EnemyAI threatAI = triggeringThreat.GetComponentInParent<EnemyAI>();
-            if (threatAI != null && threatAI is BlindEnemyAI)
+            if (threatAI != null && (threatAI is BlindEnemyAI || threatAI is AmbushEnemyAI || threatAI.dinoEmboscador))
             {
                 ai.TriggerPatrol();
                 return;
@@ -88,7 +103,7 @@ public class FleeState : IState
 
     public void Update()
     {
-        if (ai.CanSeeBigDino(out EnemyAI visiblePredator) && !(ai.IsSmallDino && visiblePredator is BlindEnemyAI))
+        if (ai.CanSeeThreat(out EnemyAI visiblePredator))
         {
             triggeringPredator = visiblePredator;
             triggeringThreat = visiblePredator.transform;
@@ -116,7 +131,7 @@ public class FleeState : IState
             threatDirectlyVisible = ai.CanSeeSpecificDino(ai.ChasingPredator);
             threatActivelyChasingMe = (ai.ChasingPredator.TargetDino == ai || ai.ChasingPredator.CurrentChaseTarget == ai.transform);
         }
-        else if (ai.Player != null && (triggeringThreat == ai.Player || triggeringThreat == ai.Player.transform))
+        else if (ai.Player != null && triggeringThreat == ai.Player)
         {
             threatDirectlyVisible = ai.CanSeePlayer();
             threatActivelyChasingMe = false;
@@ -132,21 +147,24 @@ public class FleeState : IState
                 ai.Movement.speed = ai.fleeSpeed;
             }
 
-            float bodyRadius = ai.IsSmallDino ? 0.28f : 0.50f;
+            float bodyRadius = ai.IsSmallDino ? 0.28f : (ai.IsBigDino ? 0.85f : 0.50f);
 
-            // 1. Pipeline de Nodos: cuando el dinosaurio está a 0.9m o menos del nodo actual,
-            // selecciona de inmediato el siguiente nodo ANTES de detenerse para mantener inercia continua.
+            if (nodeAdvanceCooldown > 0f) nodeAdvanceCooldown -= Time.deltaTime;
+
+            // 1. Pipeline de Nodos: cuando el dinosaurio estÃ¡ a 0.9m o menos del nodo actual,
+            // selecciona con control de cadencia el siguiente nodo para mantener inercia continua sin saturar CPU.
             float distToTargetNode = (currentFleeNode != null)
                 ? Vector2.Distance(new Vector2(myPos.x, myPos.z), new Vector2(currentFleeNode.transform.position.x, currentFleeNode.transform.position.z))
                 : 0f;
 
             bool arrived = (ai.Movement != null && ai.Movement.HasReachedDestination);
-            if (arrived || distToTargetNode <= 0.90f)
+            if (currentFleeNode == null || arrived || (distToTargetNode <= 0.90f && nodeAdvanceCooldown <= 0f))
             {
+                nodeAdvanceCooldown = NodeAdvanceCooldownDuration;
                 AdvanceToNextFleeNode();
             }
 
-            // 2. Whisker frontal continuo: si una pared u obstáculo se aproxima a < 1.5m, reorientar al siguiente nodo
+            // 2. Whisker frontal continuo: si una pared u obstÃ¡culo se aproxima a < 1.5m, reorientar al siguiente nodo
             if (obstacleAvoidCooldown > 0f) obstacleAvoidCooldown -= Time.deltaTime;
             else if (IsObstacleAhead(myPos, ai.transform.forward, bodyRadius, 1.5f))
             {
@@ -198,8 +216,8 @@ public class FleeState : IState
     }
 
     /// <summary>
-    /// Avanza de forma ininterrumpida de nodo a nodo en dirección contraria al depredador.
-    /// Garantiza al 100% que siempre se asigna un nodo destino para que la presa jamás se detenga.
+    /// Avanza de forma ininterrumpida de nodo a nodo en direcciÃ³n contraria al depredador.
+    /// Garantiza al 100% que siempre se asigna un nodo destino para que la presa jamÃ¡s se detenga.
     /// </summary>
     private void AdvanceToNextFleeNode(bool forceAlternative = false)
     {
@@ -214,7 +232,7 @@ public class FleeState : IState
         fleeDir.Normalize();
 
         float currentDistToThreat = awayFromThreat.magnitude;
-        float bodyRadius = ai.IsSmallDino ? 0.28f : 0.50f;
+        float bodyRadius = ai.IsSmallDino ? 0.28f : (ai.IsBigDino ? 0.85f : 0.50f);
 
         if (currentFleeNode != null && !recentlyVisitedFleeNodes.Contains(currentFleeNode))
         {
@@ -239,12 +257,12 @@ public class FleeState : IState
     }
 
     /// <summary>
-    /// Selección de nodo en 5 niveles para asegurar que la presa nunca se quede parada:
-    /// Nivel 1: Nodo óptimo por lookahead que aleja en dirección opuesta con pasaje libre.
+    /// SelecciÃ³n de nodo en 5 niveles para asegurar que la presa nunca se quede parada:
+    /// Nivel 1: Nodo Ã³ptimo por lookahead que aleja en direcciÃ³n opuesta con pasaje libre.
     /// Nivel 2: Mejor vecino despejado que no se dirija frontalmente hacia el depredador.
     /// Nivel 3: Cualquier vecino del nodo actual con pasaje libre.
     /// Nivel 4: Vecino conectado en el grafo que maximice la distancia a la amenaza.
-    /// Nivel 5: Nodo más lejano de la escena respecto a la amenaza.
+    /// Nivel 5: Nodo mÃ¡s lejano de la escena respecto a la amenaza.
     /// </summary>
     private Node SelectFleeNodeWithFallbacks(Vector3 myPos, Vector3 threatPos, Vector3 fleeDir, float currentDistToThreat, float bodyRadius, bool forceAlternative)
     {
@@ -281,7 +299,7 @@ public class FleeState : IState
             }
         }
 
-        // --- NIVEL 1: Búsqueda Profunda (Lookahead) ---
+        // --- NIVEL 1: BÃºsqueda Profunda (Lookahead) ---
         Node bestNode = null;
         float bestScore = float.MinValue;
 
@@ -305,7 +323,7 @@ public class FleeState : IState
             // Descartar si camina directamente de frente al depredador
             if (dotFlee < -0.35f && distNodeToThreat < currentDistToThreat) continue;
 
-            // Lookahead de ramas de escape
+            // Lookahead de ramas de escape (los vecinos del grafo ya tienen conexiÃ³n de pasaje)
             float lookaheadBonus = 0f;
             if (candidate.neighbors != null)
             {
@@ -313,11 +331,8 @@ public class FleeState : IState
                 {
                     Node n2 = candidate.neighbors[j];
                     if (n2 == null || n2 == candidate) continue;
-                    if (CanPassBetweenPoints(nodePos, n2.transform.position, bodyRadius))
-                    {
-                        float dN2 = Vector3.Distance(n2.transform.position, threatPos);
-                        if (dN2 > distNodeToThreat) lookaheadBonus += 8.0f;
-                    }
+                    float dN2 = Vector3.Distance(n2.transform.position, threatPos);
+                    if (dN2 > distNodeToThreat) lookaheadBonus += 8.0f;
                 }
             }
 
@@ -372,7 +387,7 @@ public class FleeState : IState
             }
         }
 
-        // --- NIVEL 4: Vecino conectado en el grafo más lejano al depredador ---
+        // --- NIVEL 4: Vecino conectado en el grafo mÃ¡s lejano al depredador ---
         if (currentFleeNode != null && currentFleeNode.neighbors != null && currentFleeNode.neighbors.Count > 0)
         {
             Node bestNeighbor = null;
@@ -391,7 +406,7 @@ public class FleeState : IState
             if (bestNeighbor != null) return bestNeighbor;
         }
 
-        // --- NIVEL 5: Nodo global más lejano de la escena ---
+        // --- NIVEL 5: Nodo global mÃ¡s lejano de la escena ---
         if (ai.Pathfinding != null)
         {
             Node farthest = ai.Pathfinding.GetFarthestNodeFromPosition(threatPos);
@@ -472,15 +487,18 @@ public class FleeState : IState
     private static bool IsValidWallObstacle(RaycastHit hit, Transform ignoreTransform)
     {
         if (hit.collider == null) return false;
+        if (hit.normal.y >= 0.7f) return false; // Filtra suelos y planos horizontales sin allocs
         if (ignoreTransform != null && (hit.transform == ignoreTransform || hit.transform.IsChildOf(ignoreTransform))) return false;
 
-        bool isEnemy = hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null;
-        if (isEnemy) return false;
+        if (hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null) return false;
 
-        if (hit.normal.y >= 0.7f) return false;
-
-        string colName = hit.collider.gameObject.name.ToLower();
-        if (colName.Contains("plane") || colName.Contains("floor") || colName.Contains("suelo")) return false;
+        string colName = hit.collider.gameObject.name;
+        if (colName.IndexOf("plane", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            colName.IndexOf("floor", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            colName.IndexOf("suelo", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return false;
+        }
 
         return true;
     }
@@ -521,17 +539,22 @@ public class FleeState : IState
 
     private bool HasActiveThreat()
     {
-        if (ai.IsSmallDino)
+        if (triggeringThreat != null && ai.Player != null && triggeringThreat == ai.Player) return true;
+        if (ai.CurrentThreat != null && ai.Player != null && ai.CurrentThreat == ai.Player) return true;
+
+        if (ai.IsBigDino) return false;
+
+        EnemyAI threatAI = triggeringPredator ?? ai.ChasingPredator;
+        if (threatAI == null && triggeringThreat != null) threatAI = triggeringThreat.GetComponentInParent<EnemyAI>();
+        if (threatAI == null && ai.CurrentThreat != null) threatAI = ai.CurrentThreat.GetComponentInParent<EnemyAI>();
+
+        if (threatAI != null && threatAI.gameObject.activeInHierarchy)
         {
-            if (triggeringPredator is BlindEnemyAI || ai.ChasingPredator is BlindEnemyAI) return false;
-            if (triggeringThreat != null && triggeringThreat.GetComponentInParent<BlindEnemyAI>() != null) return false;
-            if (ai.CurrentThreat != null && ai.CurrentThreat.GetComponentInParent<BlindEnemyAI>() != null) return false;
+            if (threatAI is BlindEnemyAI || threatAI is AmbushEnemyAI || threatAI.dinoEmboscador) return false;
+            if (ai.IsMediumDino) return threatAI.IsBigDino;
+            if (ai.IsSmallDino) return threatAI.IsMediumDino || threatAI.IsBigDino;
         }
 
-        if (triggeringPredator != null && triggeringPredator.gameObject.activeInHierarchy) return true;
-        if (triggeringThreat != null && triggeringThreat.gameObject.activeInHierarchy) return true;
-        if (ai.ChasingPredator != null && ai.ChasingPredator.gameObject.activeInHierarchy) return true;
-        if (ai.CurrentThreat != null && ai.CurrentThreat.gameObject.activeInHierarchy) return true;
         return false;
     }
 }

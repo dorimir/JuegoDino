@@ -8,9 +8,10 @@ public class PreyFollowLeaderState : FollowLeaderState
 
     public override void Update()
     {
-        if (ai.CanSeeBigDino(out EnemyAI bigDino) && !(bigDino is BlindEnemyAI))
+        // El dinosaurio pequeño seguidor huye ante amenazas (dinosaurio mediano o grande)
+        if (ai.CanSeeThreat(out EnemyAI threat))
         {
-            ai.NotifyPackFlee(bigDino);
+            ai.NotifyPackFlee(threat);
             return;
         }
 
@@ -27,9 +28,9 @@ public class PreyFollowLeaderState : FollowLeaderState
 
     protected virtual void CheckMutualEncounters()
     {
-        for (int i = 0; i < EnemyAI.AllPrey.Count; i++)
+        for (int i = 0; i < EnemyAI.AllSmallDinos.Count; i++)
         {
-            EnemyAI other = EnemyAI.AllPrey[i];
+            EnemyAI other = EnemyAI.AllSmallDinos[i];
             if (other == null || other == ai || !other.gameObject.activeInHierarchy) continue;
 
             if (!ai.MutuallySees(other)) continue;

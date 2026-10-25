@@ -53,9 +53,7 @@ public class BlindChaseState : ChaseState
         }
 
         Vector3 soundPos = Vector3.zero;
-        float intensity = 0f;
-        Transform soundSource = null;
-        bool heardSound = (blindAI != null) && blindAI.CheckForSounds(out soundPos, out intensity, out soundSource);
+        bool heardSound = blindAI != null && blindAI.CheckForSounds(out soundPos, out _, out _);
         if (heardSound)
         {
             lostSightTimer = 0f;
@@ -70,8 +68,6 @@ public class BlindChaseState : ChaseState
             {
                 if (ai.IsPriorityChaseActive)
                 {
-                    // En persecución prioritaria por alarma no se degrada a investigar;
-                    // se mantiene dirigiéndose hacia la posición conocida del jugador
                     if (lostSightTimer >= ai.playerLostSightTime)
                     {
                         EndChase();
@@ -88,10 +84,5 @@ public class BlindChaseState : ChaseState
         }
 
         MoveTowardsTarget(targetSoundPos, heardSound);
-    }
-
-    public override void Exit()
-    {
-        base.Exit();
     }
 }

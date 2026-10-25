@@ -3,8 +3,7 @@ using UnityEngine;
 
 /// <summary>
 /// Inteligencia Artificial específica para los dinosaurios pequeños (presas/velociraptores).
-/// Hereda de EnemyAI y maneja comportamiento de manada, seguimiento a líderes,
-/// amplio campo de visión periférica y estados de patrulla, persecución y huida.
+/// Maneja comportamiento de manada, amplio campo de visión y estados de patrulla, persecución y huida.
 /// </summary>
 public class SmallEnemyAI : EnemyAI
 {
@@ -20,32 +19,29 @@ public class SmallEnemyAI : EnemyAI
         {
             LeaderAI = leaderTransform.GetComponent<EnemyAI>();
         }
-        else if (isLeader)
+        else if (isLeader && (packFollowers == null || packFollowers.Count == 0))
         {
+            isLeader = false;
             LeaderAI = null;
         }
         packFollowers.Clear();
 
-        // Visión periférica amplia típica de dinosaurios pequeños/presas
         visionAngle = 280f;
         visionRange = 11.5f;
         DetectionRange = 11.5f;
         eyeHeight = 0.35f;
         AttackRange = 1.3f;
 
-        // Velocidades ágiles
         patrolSpeed = 5.2f;
         chaseSpeed = 9.8f;
         fleeSpeed = 13.0f;
         SafeRange = 12.0f;
 
-        // Tiempos de persecución y desiste
         preyMaxChaseTime = 3.5f;
         preyLostSightTime = 2.0f;
         playerLostSightTime = 5.0f;
         preyChaseCooldown = 3.0f;
 
-        // Parámetros de flocking en manada
         FlockRadius = 10f;
         TooCloseRadius = 2.5f;
         LeaderFollowWeight = 3f;
@@ -88,8 +84,9 @@ public class SmallEnemyAI : EnemyAI
                 }
             }
         }
-        else if (isLeader)
+        else if (isLeader && (packFollowers == null || packFollowers.Count == 0))
         {
+            isLeader = false;
             LeaderAI = null;
         }
 
@@ -112,8 +109,8 @@ public class SmallEnemyAI : EnemyAI
 
     public override void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
-        if (target == null) return;
-        if (IsPriorityChaseActive && targetDino != null) return;
+        if (target == null || (IsPriorityChaseActive && targetDino != null)) return;
+
         CurrentChaseTarget = target;
         TargetDino = targetDino;
 
@@ -126,11 +123,10 @@ public class SmallEnemyAI : EnemyAI
 
     public override void TriggerFlee(EnemyAI threat)
     {
-        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad absoluta sobre huir
+        if (IsPriorityChaseActive) return;
         if (threat == null || threat == this) return;
-        if (threat is BlindEnemyAI) return; // Los pequeños no huyen de los ciegos
+        if (threat is BlindEnemyAI || threat is AmbushEnemyAI || threat.dinoEmboscador || threat.IsPrey || threat is SmallEnemyAI) return;
         if (threat == LeaderAI || threat.EffectiveLeader == EffectiveLeader) return;
-        if (threat.IsPrey || threat is SmallEnemyAI) return;
 
         CurrentThreat = threat.transform;
         ChasingPredator = threat;
@@ -144,7 +140,7 @@ public class SmallEnemyAI : EnemyAI
 
     public override void TriggerPatrol()
     {
-        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad sobre patrullar
+        if (IsPriorityChaseActive) return;
         CurrentChaseTarget = null;
         TargetDino = null;
         CurrentThreat = null;
@@ -157,9 +153,9 @@ public class SmallEnemyAI : EnemyAI
         {
             if (StateMachine.CurrentState != SmallFollowLeader) StateMachine.ChangeState(SmallFollowLeader);
         }
-        else if (SmallPatrol != null)
+        else if (SmallPatrol != null && StateMachine.CurrentState != SmallPatrol)
         {
-            if (StateMachine.CurrentState != SmallPatrol) StateMachine.ChangeState(SmallPatrol);
+            StateMachine.ChangeState(SmallPatrol);
         }
     }
 }

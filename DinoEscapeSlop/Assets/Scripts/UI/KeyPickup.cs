@@ -1,9 +1,9 @@
-using UnityEngine;
+﻿using UnityEngine;
 
 public class KeyPickup : MonoBehaviour
 {
-    [Header("Animación de Llave")]
-    [Tooltip("Velocidad de rotación continua sobre su propio eje en grados por segundo.")]
+    [Header("AnimaciÃ³n de Llave")]
+    [Tooltip("Velocidad de rotaciÃ³n continua sobre su propio eje en grados por segundo.")]
     public float rotationSpeed = 80f;
 
     [Tooltip("Frecuencia del suave balanceo vertical.")]
@@ -17,36 +17,37 @@ public class KeyPickup : MonoBehaviour
 
     private Vector3 initialPos;
     private Transform playerTransform;
-    private bool isCollected = false;
+    private bool isCollected;
 
     private void Start()
     {
         initialPos = transform.position;
 
-        GameObject p = GameObject.FindGameObjectWithTag("Player");
-        if (p != null) playerTransform = p.transform;
+        GameObject player = GameObject.FindGameObjectWithTag("Player");
+        if (player != null)
+        {
+            playerTransform = player.transform;
+        }
 
-        SphereCollider col = GetComponent<SphereCollider>();
-        if (col == null)
+        if (!TryGetComponent<SphereCollider>(out var col))
         {
             col = gameObject.AddComponent<SphereCollider>();
             col.isTrigger = true;
             col.radius = pickupDistance;
         }
+
+        transform.position = initialPos;
     }
 
     private void Update()
     {
         if (isCollected) return;
 
-        // 1. Rotación suave continua
         transform.Rotate(Vector3.up, rotationSpeed * Time.deltaTime, Space.World);
 
-        // 2. Balanceo vertical
         float newY = initialPos.y + Mathf.Sin(Time.time * bobFrequency) * bobAmplitude;
         transform.position = new Vector3(transform.position.x, newY, transform.position.z);
 
-        // 3. Verificación de proximidad al jugador
         if (playerTransform != null)
         {
             Vector3 diff = transform.position - playerTransform.position;

@@ -8,9 +8,10 @@ public class PreyPatrolState : PatrolState
 
     protected override bool CheckPerceptions()
     {
-        if (ai.CanSeeBigDino(out EnemyAI bigDino) && !(bigDino is BlindEnemyAI))
+        // El dinosaurio pequeño huye de dinosaurios medianos y grandes
+        if (ai.CanSeeThreat(out EnemyAI threat))
         {
-            ai.NotifyPackFlee(bigDino);
+            ai.NotifyPackFlee(threat);
             return true;
         }
 

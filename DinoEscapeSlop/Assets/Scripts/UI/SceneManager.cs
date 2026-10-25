@@ -1,6 +1,5 @@
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEngine.SceneManagement;
-using UnityEngine.UIElements;
 
 namespace StealthGame
 {
@@ -10,12 +9,21 @@ namespace StealthGame
 
         public void LoadScene()
         {
-            UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
+            if (!string.IsNullOrEmpty(sceneName))
+            {
+                UnityEngine.SceneManagement.SceneManager.LoadScene(sceneName);
+            }
         }
-    
-            public void ExitGame()
+
+
+    /// <summary>
+    /// Alias compatible con el nombre del archivo SceneManager.cs.
+    /// </summary>
+    public class SceneManager : SceneManagerScript
+    {
+    }
+        public void ExitGame()
         {
-            Debug.Log("Salir del juego");
             Application.Quit();
         }
     }

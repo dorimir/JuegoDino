@@ -36,12 +36,34 @@ public static class EnemyDeathUI
         float centerX = Screen.width * 0.5f;
         float centerY = Screen.height * 0.5f;
 
-        string subText = killerDino != null && killerDino.IsSmallDino
-            ? "Has sido alcanzado y devorado por un dinosaurio pequeño."
-            : "Has sido alcanzado y devorado por el dinosaurio grande.";
+        string subText;
+        if (killerDino != null && killerDino.IsSmallDino)
+        {
+            subText = "Has sido alcanzado y devorado por un dinosaurio pequeño.";
+        }
+        else if (killerDino != null && killerDino.IsMediumDino)
+        {
+            subText = "Has sido alcanzado y devorado por un dinosaurio mediano.";
+        }
+        else
+        {
+            subText = "Has sido alcanzado y devorado por el dinosaurio grande (T-Rex).";
+        }
 
         GUI.Label(new Rect(centerX - 350, centerY - 90, 700, 70), "¡HAS MUERTO!", titleStyle);
         GUI.Label(new Rect(centerX - 350, centerY - 15, 700, 40), subText, subStyle);
         GUI.Label(new Rect(centerX - 350, centerY + 45, 700, 40), "Presiona [ R ] para volver a intentarlo", hintStyle);
+
+        GUIStyle buttonStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = Mathf.Clamp(Screen.height / 36, 16, 22),
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
+
+        if (GUI.Button(new Rect(centerX - 150, centerY + 95, 300, 48), "REINICIAR PARTIDA", buttonStyle))
+        {
+            EnemyAI.RestartGame();
+        }
     }
 }

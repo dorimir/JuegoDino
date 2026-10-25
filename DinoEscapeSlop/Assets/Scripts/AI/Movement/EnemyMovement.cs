@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public class EnemyMovement : MonoBehaviour
@@ -10,7 +10,7 @@ public class EnemyMovement : MonoBehaviour
     private Vector3 directTargetPosition;
     private bool hasDirectTarget;
 
-    [Header("Configuración de Velocidad")]
+    [Header("ConfiguraciÃ³n de Velocidad")]
     public float speed = 3.2f;
     public float acceleration = 9.0f;
 
@@ -77,16 +77,28 @@ public class EnemyMovement : MonoBehaviour
         }
 
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
+        bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
 
         if (isSmall)
         {
             patrolNodes.Clear();
-            speed = 5.2f;
+            speed = 4.8f;
             acceleration = 14.0f;
             patrolTurnRate = 260f;
             chaseTurnRate = 420f;
             driftFriction = 45.0f;
             maxBankAngle = 1.5f;
+            waypointRadius = 0.55f;
+        }
+        else if (isBig)
+        {
+            speed = 1.8f;
+            acceleration = 6.5f;
+            patrolTurnRate = 130f;
+            chaseTurnRate = 240f;
+            driftFriction = 28.0f;
+            maxBankAngle = 1.0f;
+            waypointRadius = 1.10f;
         }
         else
         {
@@ -96,9 +108,10 @@ public class EnemyMovement : MonoBehaviour
             chaseTurnRate = 340f;
             driftFriction = 35.0f;
             maxBankAngle = 1.5f;
+            waypointRadius = 0.75f;
         }
 
-        EnemyCollisionHandler.ConfigureColliders(gameObject, transform, isSmall);
+        EnemyCollisionHandler.ConfigureColliders(gameObject, transform, isSmall, isBig);
     }
 
     void Start()
@@ -107,12 +120,6 @@ public class EnemyMovement : MonoBehaviour
         if (pathfinding == null) pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
         if (ai == null) ai = GetComponent<EnemyAI>();
 
-        if (ai != null && ai.IsSmallDino)
-        {
-            if (HasReachedDestination) GoToNextPatrolNode();
-            return;
-        }
-
         if (patrolNodes != null && patrolNodes.Count > 0)
         {
             int foundIdx = patrolNodes.FindIndex(n => n == currentDestinationNode);
@@ -120,9 +127,9 @@ public class EnemyMovement : MonoBehaviour
             {
                 currentPatrolIndex = foundIdx;
             }
-            GoToNextPatrolNode();
         }
-        else
+
+        if (HasReachedDestination)
         {
             GoToNextPatrolNode();
         }
@@ -143,15 +150,11 @@ public class EnemyMovement : MonoBehaviour
 
     public bool HasClearLineTo(Vector3 targetPosition, float clearanceRadius = -1f)
     {
-        if (patrolNodes != null)
-        {
-            patrolNodes.RemoveAll(n => n == null);
-        }
-
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
-        if (clearanceRadius < 0f) clearanceRadius = isSmall ? 0.20f : 0.35f;
+        bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
+        if (clearanceRadius < 0f) clearanceRadius = isSmall ? 0.20f : (isBig ? 0.55f : 0.35f);
 
-        float rayHeight = isSmall ? 0.45f : 0.85f;
+        float rayHeight = isSmall ? 0.45f : (isBig ? 1.45f : 0.85f);
         Vector3 origin = new Vector3(transform.position.x, transform.position.y + rayHeight, transform.position.z);
         float targetY = (Mathf.Abs(targetPosition.y - transform.position.y) > 0.5f) ? targetPosition.y + rayHeight : transform.position.y + rayHeight;
         Vector3 target = new Vector3(targetPosition.x, targetY, targetPosition.z);
@@ -206,7 +209,8 @@ public class EnemyMovement : MonoBehaviour
     {
         if (node == null) return false;
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
-        float clearance = isSmall ? 0.15f : 0.22f;
+        bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
+        float clearance = isSmall ? 0.15f : (isBig ? 0.40f : 0.22f);
         return HasClearLineTo(node.transform.position, clearance);
     }
 
@@ -248,10 +252,11 @@ public class EnemyMovement : MonoBehaviour
         bool isFleeing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.FleeState);
 
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
-        float clearance = isSmall ? 0.20f : 0.35f;
+        bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
+        float clearance = isSmall ? 0.20f : (isBig ? 0.50f : 0.35f);
 
-        // Comprobación de raycast para saber si el objetivo es directamente alcanzable desde la posición actual:
-        // Si el objetivo es alcanzable ya, no hace falta que pase por ningún intermediario.
+        // ComprobaciÃ³n de raycast para saber si el objetivo es directamente alcanzable desde la posiciÃ³n actual:
+        // Si el objetivo es alcanzable ya, no hace falta que pase por ningÃºn intermediario.
         if (HasClearLineTo(targetPosition, clearance))
         {
             currentPath = null;
@@ -271,7 +276,7 @@ public class EnemyMovement : MonoBehaviour
         if (pathfinding != null)
         {
             CancelInvoke();
-            // Navegación mediante las conexiones (neighbors) de los nodos con optimización de raycast
+            // NavegaciÃ³n mediante las conexiones (neighbors) de los nodos con optimizaciÃ³n de raycast
             currentPath = pathfinding.FindPath(transform.position, targetPosition, clearance);
 
             if (currentPath != null && currentPath.Count > 0)
@@ -353,18 +358,19 @@ public class EnemyMovement : MonoBehaviour
         bool isFollower = (ai != null && ai.IsSmallDino && ai.LeaderAI != null);
         bool isFleeing = (ai != null && ai.StateMachine != null && ai.StateMachine.CurrentState == ai.FleeState);
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
-        float clearance = isSmall ? 0.20f : 0.35f;
+        bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
+        float clearance = isSmall ? 0.20f : (isBig ? 0.50f : 0.35f);
 
-        // Comprobación de raycast continua: si el objetivo final ya es directamente alcanzable desde la posición actual,
-        // no hace falta que pase por ningún intermediario restante; vamos directamente al objetivo.
+        // ComprobaciÃ³n de raycast continua: si el objetivo final ya es directamente alcanzable desde la posiciÃ³n actual,
+        // no hace falta que pase por ningÃºn intermediario restante; vamos directamente al objetivo.
         if (hasDirectTarget && HasClearLineTo(directTargetPosition, clearance))
         {
             currentPath = null;
         }
         else if (currentPath != null && currentPath.Count > 0 && targetIndex < currentPath.Count)
         {
-            // Atajo dinámico por raycast: comprobamos desde el último nodo hacia adelante si ya es visible.
-            // Si cualquier nodo más lejano del camino es alcanzable directamente, saltamos todos los intermediarios.
+            // Atajo dinÃ¡mico por raycast: comprobamos desde el Ãºltimo nodo hacia adelante si ya es visible.
+            // Si cualquier nodo mÃ¡s lejano del camino es alcanzable directamente, saltamos todos los intermediarios.
             for (int i = currentPath.Count - 1; i > targetIndex; i--)
             {
                 if (HasClearLineTo(currentPath[i], clearance))
@@ -491,27 +497,40 @@ public class EnemyMovement : MonoBehaviour
                     GoToNextPatrolNode();
                 }
 
-                transform.position += desiredDirection * 0.2f;
+                int wallMask = ~((1 << 3) | (1 << 2));
+                Vector3 unstuckDir = desiredDirection;
+                if (!Physics.SphereCast(transform.position + Vector3.up * 0.5f, 0.2f, unstuckDir, out _, 0.25f, wallMask, QueryTriggerInteraction.Ignore))
+                {
+                    transform.position += unstuckDir * 0.15f;
+                }
             }
 
             lastStuckCheckPosition = transform.position;
             stuckTimer = 0f;
         }
 
-        if (distToWaypoint > 0.35f)
-        {
-            desiredDirection = ApplyWhiskerAvoidance(desiredDirection, isSmall);
-        }
+        // CorrecciÃ³n predictiva de trayectoria contra muros, marcos y esquinas
+        desiredDirection = ApplyWhiskerAvoidance(desiredDirection, isSmall, out float wallAvoidanceUrgency);
 
         float turnAngle = Vector3.Angle(transform.forward, desiredDirection);
         float speedMultiplier = (!isChasing && turnAngle > 45f) ? Mathf.Lerp(0.7f, 1.0f, Mathf.Cos(turnAngle * Mathf.Deg2Rad)) : 1.0f;
+
+        // ModulaciÃ³n suave de velocidad si se aproxima a un muro u obstÃ¡culo para garantizar un giro limpio sin impacto
+        if (wallAvoidanceUrgency > 0.15f)
+        {
+            speedMultiplier *= Mathf.Lerp(1.0f, 0.45f, (wallAvoidanceUrgency - 0.15f) / 0.85f);
+        }
+
         float targetSpeed = speed * speedMultiplier;
 
         float currentTurnRate = (isChasing || isFleeing) ? chaseTurnRate : patrolTurnRate;
+        // Dinamismo de giro aumentado ante proximidad de muros para librar esquinas con rapidez y fluidez
+        float effectiveTurnRate = Mathf.Lerp(currentTurnRate, Mathf.Max(currentTurnRate, 340f), wallAvoidanceUrgency);
+
         if (desiredDirection.sqrMagnitude > 0.001f)
         {
             Quaternion targetRotation = Quaternion.LookRotation(desiredDirection, Vector3.up);
-            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, currentTurnRate * Time.deltaTime);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, effectiveTurnRate * Time.deltaTime);
         }
 
         Vector3 forwardDir = transform.forward;
@@ -533,7 +552,7 @@ public class EnemyMovement : MonoBehaviour
         transform.rotation = horizontalRot * Quaternion.Euler(0f, 0f, currentBankAngle);
 
         Vector3 displacement = currentVelocity * Time.deltaTime;
-        float bodyRadius = isSmall ? 0.28f : 0.50f;
+        float bodyRadius = isSmall ? 0.28f : (isBig ? 0.85f : 0.50f);
         EnemyCollisionHandler.MoveSafely(ai, transform, ref currentVelocity, displacement, bodyRadius);
         SnapToGround(false);
     }
@@ -762,6 +781,9 @@ public class EnemyMovement : MonoBehaviour
     /// </summary>
     public void SnapToNode()
     {
+        if (ai == null) ai = GetComponent<EnemyAI>();
+        if (ai != null && (ai.dinoEmboscador || ai is AmbushEnemyAI)) return;
+
         if (pathfinding == null) pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
         Node spawnNode = (pathfinding != null) ? pathfinding.GetClosestNode(transform.position) : null;
 
@@ -785,51 +807,159 @@ public class EnemyMovement : MonoBehaviour
             SetCurrentDestinationNode(spawnNode);
         }
     }
-    /// Ajusta la posición vertical del dinosaurio para que camine firmemente a ras de suelo,
-    /// detectando la superficie transitable inferior mediante raycast e ignorando al jugador y otros dinosaurios.
-    /// </summary>
+
     /// <summary>
-    /// DesviaciÃ³n predictiva mediante 'bigotes' laterales (raycasts a Â±28 grados).
-    /// Detecta marcos de puertas y esquinas antes de colisionar fÃ­sicamente, guiando suavemente al dinosaurio.
+    /// DesviaciÃ³n predictiva multi-sonda contra muros, esquinas y marcos de puertas.
+    /// Detecta obstÃ¡culos con antelaciÃ³n proporcional a la velocidad y corrige suavemente
+    /// la trayectoria siguiendo las normales de superficie y tangentes de despeje.
     /// </summary>
-    private Vector3 ApplyWhiskerAvoidance(Vector3 desiredDir, bool isSmall)
+    public Vector3 ApplyWhiskerAvoidance(Vector3 desiredDir, bool isSmall)
     {
-        float rayHeight = isSmall ? 0.45f : 0.85f;
+        return ApplyWhiskerAvoidance(desiredDir, isSmall, out _);
+    }
+
+    public Vector3 ApplyWhiskerAvoidance(Vector3 desiredDir, bool isSmall, out float wallAvoidanceUrgency)
+    {
+        wallAvoidanceUrgency = 0f;
+        if (desiredDir.sqrMagnitude < 0.0001f) return desiredDir;
+
+        bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
+        float bodyRadius = isSmall ? 0.28f : (isBig ? 0.85f : 0.50f);
+        float rayHeight = isSmall ? 0.45f : (isBig ? 1.45f : 0.85f);
         Vector3 origin = transform.position + Vector3.up * rayHeight;
-        float whiskerLength = isSmall ? 1.0f : 1.4f;
-        float whiskerAngle = 28f;
+
+        // Distancia predictiva dinÃ¡mica: mayor velocidad implica mayor anticipaciÃ³n
+        float curSpeed = Mathf.Max(speed, currentVelocity.magnitude);
+        float baseLookahead = isSmall ? 1.35f : (isBig ? 2.65f : 1.95f);
+        float forwardLookahead = Mathf.Clamp(baseLookahead + (curSpeed * 0.38f), 1.35f, 4.5f);
         int wallLayerMask = ~((1 << 3) | (1 << 2));
 
-        Vector3 leftDir = Quaternion.Euler(0f, -whiskerAngle, 0f) * transform.forward;
-        Vector3 rightDir = Quaternion.Euler(0f, whiskerAngle, 0f) * transform.forward;
+        Vector3 forward = transform.forward;
+        Vector3 right = transform.right;
+
+        // DirecciÃ³n de avance combinada entre orientaciÃ³n fÃ­sica y rumbo deseado
+        Vector3 refHeading = (forward * 0.6f + desiredDir.normalized * 0.4f).normalized;
+        if (refHeading.sqrMagnitude < 0.001f) refHeading = forward;
+        Vector3 refRight = Vector3.Cross(Vector3.up, refHeading).normalized;
 
         Vector3 avoidanceForce = Vector3.zero;
+        float maxUrgency = 0f;
 
-        // Bigote izquierdo: si detecta obstÃ¡culo, empuja suavemente hacia la derecha
-        if (Physics.Raycast(origin, leftDir, out RaycastHit leftHit, whiskerLength, wallLayerMask, QueryTriggerInteraction.Ignore))
+        // 1. Sonda central frontal (SphereCast con radio corporal para anticipar muros perpendiculares y esquinas)
+        float frontalSphereRadius = bodyRadius * 0.55f;
+        if (Physics.SphereCast(origin, frontalSphereRadius, refHeading, out RaycastHit centerHit, forwardLookahead, wallLayerMask, QueryTriggerInteraction.Ignore))
         {
-            if (IsValidWallObstacle(leftHit))
+            if (IsValidWallObstacle(centerHit))
             {
-                float strength = 1.0f - (leftHit.distance / whiskerLength);
-                avoidanceForce += transform.right * (strength * 0.9f);
+                float hitDist = Mathf.Max(0.02f, centerHit.distance);
+                float urgency = 1.0f - Mathf.Clamp01(hitDist / forwardLookahead);
+                // ProgresiÃ³n exponencial suave para no dar tirones lejanos pero responder enÃ©rgicamente cerca
+                float weight = urgency * urgency;
+                maxUrgency = Mathf.Max(maxUrgency, urgency);
+
+                Vector3 wallNormal = new Vector3(centerHit.normal.x, 0f, centerHit.normal.z).normalized;
+                if (wallNormal.sqrMagnitude < 0.001f) wallNormal = -refHeading;
+
+                // Tangentes al muro en el plano XZ
+                Vector3 tangentA = Vector3.Cross(Vector3.up, wallNormal).normalized;
+                Vector3 tangentB = -tangentA;
+
+                // Elegir la tangente que favorezca la direcciÃ³n deseada o el flanco con giro mÃ¡s natural
+                Vector3 chosenTangent;
+                float dotA = Vector3.Dot(desiredDir, tangentA);
+                float dotB = Vector3.Dot(desiredDir, tangentB);
+
+                if (Mathf.Abs(dotA - dotB) > 0.05f)
+                {
+                    chosenTangent = (dotA > dotB) ? tangentA : tangentB;
+                }
+                else
+                {
+                    // Ante un muro completamente perpendicular y simÃ©trico, desviar hacia el lado al que ya apunta refRight
+                    chosenTangent = (Vector3.Dot(tangentA, refRight) > 0f) ? tangentA : tangentB;
+                }
+
+                // Vector de desviaciÃ³n frontal: empuja a lo largo del muro (tangente) y alejÃ¡ndose de la superficie (normal)
+                Vector3 steerDir = (chosenTangent * 1.15f + wallNormal * 0.85f).normalized;
+                avoidanceForce += steerDir * (weight * 2.4f);
             }
         }
 
-        // Bigote derecho: si detecta obstÃ¡culo, empuja suavemente hacia la izquierda
-        if (Physics.Raycast(origin, rightDir, out RaycastHit rightHit, whiskerLength, wallLayerMask, QueryTriggerInteraction.Ignore))
+        // 2. Sondas angulares predictivas (Whiskers):
+        // Diagonales frontales (Â±26Â°) para anticipar esquinas en giro y marcos de puertas
+        // Flancos amplios (Â±55Â°) para evitar raspar muros laterales en curvas cerradas
+        float[] probeAngles = new float[] { -26f, 26f, -55f, 55f };
+        float[] probeLengths = new float[] {
+            forwardLookahead * 0.90f,
+            forwardLookahead * 0.90f,
+            forwardLookahead * 0.65f,
+            forwardLookahead * 0.65f
+        };
+        float[] probeWeights = new float[] { 1.4f, 1.4f, 1.0f, 1.0f };
+
+        float leftMinDist = float.MaxValue;
+        float rightMinDist = float.MaxValue;
+
+        for (int i = 0; i < probeAngles.Length; i++)
         {
-            if (IsValidWallObstacle(rightHit))
+            float angle = probeAngles[i];
+            float length = probeLengths[i];
+            float pWeight = probeWeights[i];
+
+            Vector3 probeDir = Quaternion.Euler(0f, angle, 0f) * refHeading;
+
+            if (Physics.Raycast(origin, probeDir, out RaycastHit hit, length, wallLayerMask, QueryTriggerInteraction.Ignore))
             {
-                float strength = 1.0f - (rightHit.distance / whiskerLength);
-                avoidanceForce -= transform.right * (strength * 0.9f);
+                if (IsValidWallObstacle(hit))
+                {
+                    float hitDist = Mathf.Max(0.02f, hit.distance);
+                    float urgency = 1.0f - Mathf.Clamp01(hitDist / length);
+                    float weight = urgency * urgency * pWeight;
+                    maxUrgency = Mathf.Max(maxUrgency, urgency);
+
+                    if (angle < 0f && hitDist < leftMinDist) leftMinDist = hitDist;
+                    else if (angle > 0f && hitDist < rightMinDist) rightMinDist = hitDist;
+
+                    Vector3 wallNormal = new Vector3(hit.normal.x, 0f, hit.normal.z).normalized;
+                    if (wallNormal.sqrMagnitude < 0.001f) wallNormal = (angle < 0f) ? refRight : -refRight;
+
+                    // DesvÃ­o lejos de la pared: componente normal mÃ¡s componente de desvÃ­o lateral opuesto
+                    Vector3 lateralPush = (angle < 0f) ? refRight : -refRight;
+                    Vector3 probeSteer = (wallNormal * 0.75f + lateralPush * 0.55f).normalized;
+                    avoidanceForce += probeSteer * weight;
+                }
             }
         }
 
+        // Si una sonda detectÃ³ obstÃ¡culo cercano en un lado y el otro lado estÃ¡ mÃ¡s despejado,
+        // reforzar la correcciÃ³n hacia el lado abierto
+        if (leftMinDist < float.MaxValue || rightMinDist < float.MaxValue)
+        {
+            if (leftMinDist < rightMinDist)
+            {
+                float bias = 1.0f - Mathf.Clamp01(leftMinDist / forwardLookahead);
+                avoidanceForce += refRight * (bias * 0.7f);
+            }
+            else if (rightMinDist < leftMinDist)
+            {
+                float bias = 1.0f - Mathf.Clamp01(rightMinDist / forwardLookahead);
+                avoidanceForce -= refRight * (bias * 0.7f);
+            }
+        }
+
+        wallAvoidanceUrgency = maxUrgency;
+
+        // 3. Mezclado cinemÃ¡tico suave con la direcciÃ³n deseada
         if (avoidanceForce.sqrMagnitude > 0.001f)
         {
-            Vector3 blended = (desiredDir + avoidanceForce).normalized;
-            blended.y = 0f;
-            return blended.sqrMagnitude > 0.001f ? blended : desiredDir;
+            // El factor de mezcla aumenta progresivamente con la urgencia
+            float blendWeight = Mathf.Clamp01(maxUrgency * 1.5f);
+            Vector3 corrected = Vector3.Lerp(desiredDir.normalized, avoidanceForce.normalized, blendWeight);
+            corrected.y = 0f;
+            if (corrected.sqrMagnitude > 0.001f)
+            {
+                return corrected.normalized;
+            }
         }
 
         return desiredDir;
@@ -838,11 +968,13 @@ public class EnemyMovement : MonoBehaviour
     private bool IsValidWallObstacle(RaycastHit hit)
     {
         if (hit.collider == null) return false;
+        if (hit.collider.isTrigger) return false;
         if (hit.transform == transform || hit.transform.IsChildOf(transform) || transform.IsChildOf(hit.transform)) return false;
         if (hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null) return false;
         if (hit.collider.CompareTag("Player") || hit.collider.GetComponentInParent<FirstPersonMovement>() != null) return false;
+        if (hit.collider.CompareTag("canPickUp")) return false;
         if (ai != null && ai.Player != null && (hit.transform == ai.Player || hit.transform.IsChildOf(ai.Player))) return false;
-        if (hit.normal.y >= 0.7f) return false;
+        if (hit.normal.y >= 0.65f) return false;
 
         string name = hit.collider.gameObject.name.ToLower();
         if (name.Contains("plane") || name.Contains("floor") || name.Contains("suelo")) return false;
@@ -852,13 +984,9 @@ public class EnemyMovement : MonoBehaviour
 
     public void SnapToGround(bool instant = false)
     {
-        if (patrolNodes != null)
-        {
-            patrolNodes.RemoveAll(n => n == null);
-        }
-
         bool isSmall = (ai != null) ? ai.IsSmallDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) <= 1.4f);
-        float rayHeight = isSmall ? 0.8f : 1.5f;
+        bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
+        float rayHeight = isSmall ? 0.8f : (isBig ? 2.2f : 1.5f);
         Vector3 rayStart = new Vector3(transform.position.x, transform.position.y + rayHeight, transform.position.z);
         float maxDist = rayHeight + 4.5f;
 
@@ -898,7 +1026,7 @@ public class EnemyMovement : MonoBehaviour
             }
             else
             {
-                pos.y = Mathf.MoveTowards(pos.y, targetY, 15f * Time.deltaTime);
+                pos.y = Mathf.MoveTowards(pos.y, targetY, Mathf.Max(groundSnapSpeed, 25f) * Time.deltaTime);
             }
             transform.position = pos;
         }

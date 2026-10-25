@@ -2,11 +2,12 @@ using UnityEngine;
 
 /// <summary>
 /// Dino Emboscador - Estado OCULTO:
-/// Quieto en su punto de emboscada. Si ve al jugador (con el mismo sigilo que el resto de dinos) pasa a ACECHO.
+/// Permanece quieto en su punto de emboscada hasta detectar visualmente al jugador.
+/// Se alinea con la orientación del punto de emboscada y vigila su campo de visión.
 /// </summary>
 public class AmbushHiddenState : IState
 {
-    private EnemyAI ai;
+    private readonly EnemyAI ai;
 
     public AmbushHiddenState(EnemyAI ai)
     {
@@ -21,15 +22,21 @@ public class AmbushHiddenState : IState
 
     public void Update()
     {
-        // EnemyMovement.Start puede mandarlo a un nodo: se mantiene quieto
-        if (ai.Movement != null && !ai.Movement.HasReachedDestination) StopMoving();
+        if (ai.Movement != null && !ai.Movement.HasReachedDestination)
+        {
+            StopMoving();
+        }
 
-        // Recupera suavemente su orientación original
-        ai.transform.rotation = Quaternion.RotateTowards(ai.transform.rotation, ai.AmbushHomeRot, 90f * Time.deltaTime);
+        // Rotación suave hacia la orientación del punto de emboscada
+        if (ai.AmbushHomeRot != Quaternion.identity)
+        {
+            ai.transform.rotation = Quaternion.RotateTowards(ai.transform.rotation, ai.AmbushHomeRot, 120f * Time.deltaTime);
+        }
 
         ai.EnsurePlayerReference();
         if (ai.Player == null) return;
 
+        // Detecta al jugador pasando por delante dentro de su cono de visión
         if (ai.CanSeePlayer())
         {
             ai.StateMachine.ChangeState(ai.AmbushStalkState);
@@ -49,16 +56,17 @@ public class AmbushHiddenState : IState
 
 /// <summary>
 /// Dino Emboscador - Estado ACECHO:
-/// Se gira hacia el jugador y le da un tiempo de aviso. Si el jugador sigue dentro de ambushTriggerRange
-/// durante ambushWarningTime, se lanza al ataque (ChaseState). Si lo pierde de vista, pasa a RECUPERACIÓN.
+/// Encarar al jugador durante un breve tiempo de advertencia antes de lanzar la persecución.
+/// Si el jugador se acerca demasiado o permanece en su visión, ataca.
+/// Si el jugador huye y rompe la línea de visión rápidamente, vuelve al punto de emboscada.
 /// </summary>
 public class AmbushStalkState : IState
 {
-    private EnemyAI ai;
+    private readonly EnemyAI ai;
     private float warningTimer;
     private float lostSightTimer;
     private const float MaxLostSight = 1.5f;
-    private const float TurnSpeed = 180f;
+    private const float TurnSpeed = 220f;
 
     public AmbushStalkState(EnemyAI ai)
     {
@@ -67,9 +75,9 @@ public class AmbushStalkState : IState
 
     public void Enter()
     {
-        Debug.Log($"[{ai.gameObject.name}] (Emboscador) acecha al jugador.");
         warningTimer = 0f;
         lostSightTimer = 0f;
+        ai.SetVisualState(EnemyAI.DinoVisualState.Stalking);
 
         if (ai.Movement != null)
         {
@@ -91,30 +99,36 @@ public class AmbushStalkState : IState
         toPlayer.y = 0f;
         float dist = toPlayer.magnitude;
 
-        // Pérdida de vista
-        if (ai.CanSeePlayer()) lostSightTimer = 0f;
-        else lostSightTimer += Time.deltaTime;
+        if (ai.CanSeePlayer())
+        {
+            lostSightTimer = 0f;
+        }
+        else
+        {
+            lostSightTimer += Time.deltaTime;
+        }
 
+        // Si pierde de vista al jugador o este se aleja demasiado del rango de acecho
         if (lostSightTimer >= MaxLostSight || dist > ai.ambushStalkRange * 1.5f)
         {
             ai.StateMachine.ChangeState(ai.AmbushRecoverState);
             return;
         }
 
-        // Girarse hacia el jugador
+        // Girar hacia el jugador
         if (toPlayer.sqrMagnitude > 0.01f)
         {
             Quaternion look = Quaternion.LookRotation(toPlayer.normalized, Vector3.up);
             ai.transform.rotation = Quaternion.RotateTowards(ai.transform.rotation, look, TurnSpeed * Time.deltaTime);
         }
 
-        // Aviso: solo avanza si el jugador está dentro del radio de ataque
-        if (dist <= ai.ambushTriggerRange)
+        // Cuenta atrás de acecho antes de abalanzarse
+        if (dist <= ai.ambushTriggerRange || dist <= ai.visionRange)
         {
             warningTimer += Time.deltaTime;
-            if (warningTimer >= ai.ambushWarningTime)
+            // Si el jugador está muy cerca (< 3.5m) o ha concluido el aviso de acecho, lanza el ataque
+            if (dist <= 3.5f || warningTimer >= ai.ambushWarningTime)
             {
-                Debug.Log($"[{ai.gameObject.name}] (Emboscador) ¡SE LANZA AL ATAQUE!");
                 ai.TriggerAttack(ai.Player);
             }
         }
@@ -129,19 +143,19 @@ public class AmbushStalkState : IState
 
 /// <summary>
 /// Dino Emboscador - Estado RECUPERACIÓN:
-/// Fase 1: cansado y quieto (ventana de escape del jugador).
-/// Fase 2: vuelve andando a su punto de emboscada con A* y pasa a OCULTO.
+/// Fase de cansancio tras la persecución y posterior regreso navegando al punto de emboscada.
+/// Al llegar al punto de emboscada, reanuda el estado oculto para seguir acechando.
 /// </summary>
 public class AmbushRecoverState : IState
 {
     private enum Phase { Tired, Returning }
 
-    private EnemyAI ai;
+    private readonly EnemyAI ai;
     private Phase phase;
     private float timer;
     private float repathTimer;
-    private const float RepathInterval = 1.0f;
-    private const float HomeRadius = 0.8f;
+    private const float RepathInterval = 0.5f;
+    private const float HomeRadius = 1.0f;
 
     public AmbushRecoverState(EnemyAI ai)
     {
@@ -154,7 +168,7 @@ public class AmbushRecoverState : IState
         timer = 0f;
         repathTimer = 0f;
 
-        ai.SetVisualState(EnemyAI.DinoVisualState.Normal);
+        ai.SetVisualState(EnemyAI.DinoVisualState.Tired);
 
         if (ai.Movement != null)
         {
@@ -172,16 +186,31 @@ public class AmbushRecoverState : IState
             if (timer >= ai.ambushTiredTime)
             {
                 phase = Phase.Returning;
-                repathTimer = RepathInterval;
-                if (ai.Movement != null) ai.Movement.MoveTo(ai.AmbushHomePos);
+                repathTimer = 0f;
+
+                if (ai is AmbushEnemyAI ambushAI && ambushAI.returnToNearestAmbushPoint)
+                {
+                    AmbushPoint nearest = ambushAI.FindNearestAmbushPoint();
+                    if (nearest != null)
+                    {
+                        ambushAI.SetAmbushPoint(nearest);
+                    }
+                }
+
+                ai.SetVisualState(EnemyAI.DinoVisualState.Normal);
+                if (ai.Movement != null)
+                {
+                    ai.Movement.speed = ai.patrolSpeed;
+                    ai.Movement.MoveTo(ai.AmbushHomePos);
+                }
             }
             return;
         }
 
-        // Fase de vuelta
         Vector3 toHome = ai.AmbushHomePos - ai.transform.position;
         toHome.y = 0f;
 
+        // Si ha llegado al punto de emboscada o el pathfinding ha completado el trayecto
         if (toHome.magnitude <= HomeRadius || (ai.Movement != null && ai.Movement.HasReachedDestination))
         {
             ai.StateMachine.ChangeState(ai.AmbushHiddenState);

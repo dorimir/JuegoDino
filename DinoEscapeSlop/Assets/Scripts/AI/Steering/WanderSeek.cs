@@ -10,23 +10,31 @@ public class WanderSeek : MonoBehaviour
     [SerializeField] private float radius = 10f;
     [SerializeField] private float maxWanderStrength = 1f;
     [SerializeField] private float step = 45f;
-    [SerializeField] private float maxspeed = 2.5f;
+    [SerializeField] private float maxSpeed = 2.5f;
 
     private Vector3 wander = Vector3.zero;
+    private ConstantForce constantForceComponent;
 
-    void FixedUpdate()
+    private void Awake()
+    {
+        constantForceComponent = GetComponent<ConstantForce>();
+    }
+
+    private void FixedUpdate()
     {
         WanderRotation(target);
         ForceForward(target);
     }
 
-    public void setTarget(Vector3 newTarget)
+    public void SetTarget(Vector3 newTarget)
     {
         target = newTarget;
         wander = target - transform.position;
     }
+    public void setTarget(Vector3 newTarget) => SetTarget(newTarget);
 
-    public void setArrival(bool newArrival) => arrival = newArrival;
+    public void SetArrival(bool newArrival) => arrival = newArrival;
+    public void setArrival(bool newArrival) => SetArrival(newArrival);
 
     private void WanderRotation(Vector3 targetPosition)
     {
@@ -66,21 +74,19 @@ public class WanderSeek : MonoBehaviour
             if (wander.sqrMagnitude > 0.001f)
             {
                 Quaternion targetRotation = Quaternion.LookRotation(wander);
-                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * maxspeed);
+                transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * maxSpeed);
             }
         }
         else
         {
             Quaternion targetRotation = Quaternion.LookRotation(desired);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * maxspeed);
+            transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * maxSpeed);
         }
     }
 
     private void ForceForward(Vector3 targetPosition)
     {
-        if (targetPosition == Vector3.zero) return;
-        ConstantForce cf = GetComponent<ConstantForce>();
-        if (cf == null) return;
+        if (targetPosition == Vector3.zero || constantForceComponent == null) return;
 
         Vector3 force = Vector3.Lerp(transform.position, targetPosition, smoothness * Time.deltaTime);
         force = new Vector3(0, 0, Mathf.Abs(force.z));
@@ -94,11 +100,11 @@ public class WanderSeek : MonoBehaviour
             {
                 float ratio = distance / radius;
                 Vector3 counterforce = new Vector3(0, 0, force.z * (1f + (1f - ratio)) * repel);
-                cf.relativeForce = (force - counterforce) * ratio;
+                constantForceComponent.relativeForce = (force - counterforce) * ratio;
                 return;
             }
         }
 
-        cf.relativeForce = force;
+        constantForceComponent.relativeForce = force;
     }
 }

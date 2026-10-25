@@ -2,9 +2,7 @@ using UnityEngine;
 
 /// <summary>
 /// Inteligencia Artificial específica para el dinosaurio ciego.
-/// Hereda de EnemyAI y reemplaza por completo la visión por audición/detección de ruidos:
-/// pasos del jugador (caminar, correr, saltar) y objetos de distracción sonoros (RastreoSonoro).
-/// Posee estados propios: BlindPatrolState, BlindInvestigateState y BlindChaseState.
+/// Reemplaza la visión por audición/detección de ruidos del jugador y objetos de distracción.
 /// </summary>
 public class BlindEnemyAI : EnemyAI
 {
@@ -12,13 +10,13 @@ public class BlindEnemyAI : EnemyAI
     [Tooltip("Multiplicador general de la sensibilidad auditiva del dinosaurio ciego.")]
     public float hearingSensitivityMultiplier = 1.0f;
 
-    [Tooltip("Radio de detección de sonido cuando el jugador corre (doble toque W).")]
+    [Tooltip("Radio de detección de sonido cuando el jugador corre.")]
     public float runNoiseRadius = 15.0f;
 
     [Tooltip("Radio de detección de sonido cuando el jugador camina normalmente.")]
     public float walkNoiseRadius = 6.5f;
 
-    [Tooltip("Radio de detección de sonido cuando el jugador va agachado (Shift sigilo).")]
+    [Tooltip("Radio de detección de sonido cuando el jugador va agachado.")]
     public float crouchNoiseRadius = 2.0f;
 
     [Tooltip("Radio de detección de sonido cuando el jugador salta o aterriza.")]
@@ -34,7 +32,7 @@ public class BlindEnemyAI : EnemyAI
     [Tooltip("Tiempo máximo de silencio en persecución antes de volver a investigar.")]
     public float lostSoundDuration = 2.5f;
 
-    [Tooltip("Tiempo que permanece rastreando y olfateando en el lugar del sonido.")]
+    [Tooltip("Tiempo que permanece rastreando en el lugar del sonido.")]
     public float investigateWaitDuration = 3.5f;
 
     public BlindPatrolState BlindPatrol { get; protected set; }
@@ -45,7 +43,6 @@ public class BlindEnemyAI : EnemyAI
     public Transform LastSoundSource { get; set; }
     public float LastHeardTime { get; set; }
 
-    // El dinosaurio es ciego: no ve al jugador ni a otros dinosaurios
     public override bool CanSeePlayer() => false;
     public override bool CanSeeSpecificDino(EnemyAI targetDino) => false;
     public override bool CanSeeBigDino(out EnemyAI spottedPredator) { spottedPredator = null; return false; }
@@ -84,44 +81,25 @@ public class BlindEnemyAI : EnemyAI
         StateMachine.AllowState(BlindPatrol);
         StateMachine.AllowState(BlindInvestigate);
         StateMachine.AllowState(BlindChase);
-        StateMachine.AllowState(FleeState);
+        // El dinosaurio ciego no entra en estado de huida (FleeState)
     }
 
-    /// <summary>
-    /// Aunque el dinosaurio es ciego para el sigilo y la visión normal,
-    /// posee un campo frontal sensible a la luz directa de la linterna.
-    /// </summary>
-    public override float GetVisionOrFacingCone()
-    {
-        return 110f;
-    }
+    public override float GetVisionOrFacingCone() => 110f;
 
     /// <summary>
-    /// El dinosaurio grande también huye del jugador si este enciende y apaga la linterna
-    /// apuntándole dentro de su cono de visión/campo frontal.
+    /// El dinosaurio ciego no posee visión: no percibe la luz de la linterna y nunca se asusta ni entra en huida.
     /// </summary>
     public override void TriggerScaredByLight(Transform threatPlayer)
     {
-        if (threatPlayer == null) EnsurePlayerReference();
-        Transform threat = threatPlayer != null ? threatPlayer : Player;
-        if (threat == null) return;
+        return;
+    }
 
-        CurrentThreat = threat;
-        ChasingPredator = null;
-        SpottedThreatPosition = threat.position;
-        SafeRange = 25f;
-
-        if (StateMachine != null && FleeState != null)
-        {
-            if (StateMachine.CurrentState != FleeState)
-            {
-                StateMachine.ChangeState(FleeState);
-            }
-            else
-            {
-                FleeState.Enter();
-            }
-        }
+    /// <summary>
+    /// El dinosaurio ciego no responde a señales de huida ni huye de otros depredadores.
+    /// </summary>
+    public override void NotifyPackFlee(EnemyAI threat)
+    {
+        return;
     }
 
     protected override void Start()
@@ -138,13 +116,8 @@ public class BlindEnemyAI : EnemyAI
 
     public override void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
-        // Los dinosaurios ciegos no atacan a los pequeños
         if (targetDino != null && targetDino.IsSmallDino) return;
-        if (target != null)
-        {
-            EnemyAI targetAI = target.GetComponentInParent<EnemyAI>();
-            if (targetAI != null && targetAI.IsSmallDino) return;
-        }
+        if (target != null && target.GetComponentInParent<EnemyAI>()?.IsSmallDino == true) return;
 
         TargetDino = null;
 
@@ -164,12 +137,8 @@ public class BlindEnemyAI : EnemyAI
 
     public virtual void TriggerInvestigate(Vector3 soundPos, Transform source = null)
     {
-        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad absoluta sobre investigar
-        if (source != null)
-        {
-            EnemyAI sourceAI = source.GetComponentInParent<EnemyAI>();
-            if (sourceAI != null && sourceAI.IsSmallDino) return;
-        }
+        if (IsPriorityChaseActive) return;
+        if (source != null && source.GetComponentInParent<EnemyAI>()?.IsSmallDino == true) return;
 
         LastHeardSoundPos = soundPos;
         LastSoundSource = source;
@@ -183,7 +152,7 @@ public class BlindEnemyAI : EnemyAI
 
     public override void TriggerPatrol()
     {
-        if (IsPriorityChaseActive) return; // La persecución por alarma tiene prioridad absoluta sobre patrullar
+        if (IsPriorityChaseActive) return;
         CurrentChaseTarget = null;
         TargetDino = null;
         CurrentThreat = null;
@@ -198,7 +167,26 @@ public class BlindEnemyAI : EnemyAI
 
     public override void TriggerFlee(EnemyAI threat)
     {
-        // El dinosaurio ciego es un depredador alfa y no huye
+    }
+
+    /// <summary>
+    /// Notificacion inmediata de sonido prioritario (objeto sonoro o impacto de linterna al caer).
+    /// Interrumpe patrullaje o persecucion previa para investigar la fuente sonora de distraccion.
+    /// </summary>
+    public void NotificarSonidoPrioritario(Vector3 soundPos, float intensity, Transform soundSource)
+    {
+        LastHeardSoundPos = soundPos;
+        LastSoundSource = soundSource;
+        LastHeardTime = Time.time;
+
+        if (intensity >= highUrgencyThreshold)
+        {
+            TriggerAttack(soundSource != null ? soundSource : Player);
+        }
+        else
+        {
+            TriggerInvestigate(soundPos, soundSource);
+        }
     }
 
     public bool CheckForSounds(out Vector3 soundPos, out float intensity, out Transform soundSource)
@@ -207,16 +195,46 @@ public class BlindEnemyAI : EnemyAI
         intensity = 0f;
         soundSource = null;
 
-        // 1. Detección del jugador por ruido físico
+        // =========================================================================
+        // 1. PRIORIDAD MAXIMA: Sonido del Objeto Sonoro (RastreoSonoro)
+        // =========================================================================
+        if (RastreoSonoro.HaySonidoObjetoActivo(transform.position, hearingSensitivityMultiplier, out Vector3 objPos, out float objIntensity, out Transform objSource))
+        {
+            soundPos = objPos;
+            intensity = objIntensity;
+            soundSource = objSource;
+            LastHeardTime = Time.time;
+            LastHeardSoundPos = soundPos;
+            LastSoundSource = soundSource;
+            return true;
+        }
+
+        // =========================================================================
+        // 2. PRIORIDAD MAXIMA: Sonido de la Linterna Cayendo / Impactando (Linterna)
+        // =========================================================================
+        if (Linterna.HaySonidoCaidaActivo(transform.position, hearingSensitivityMultiplier, out Vector3 linternaPos, out float linternaIntensity, out Transform linternaSource))
+        {
+            soundPos = linternaPos;
+            intensity = linternaIntensity;
+            soundSource = linternaSource;
+            LastHeardTime = Time.time;
+            LastHeardSoundPos = soundPos;
+            LastSoundSource = soundSource;
+            return true;
+        }
+
+        // =========================================================================
+        // 3. PRIORIDAD SECUNDARIA: Ruido generado por el movimiento del Jugador
+        // =========================================================================
         EnsurePlayerReference();
         if (Player != null)
         {
             FirstPersonMovement fpm = Player.GetComponent<FirstPersonMovement>() ??
-                                     Player.GetComponentInParent<FirstPersonMovement>() ??
-                                     Player.GetComponentInChildren<FirstPersonMovement>();
+                                      Player.GetComponentInParent<FirstPersonMovement>() ??
+                                      Player.GetComponentInChildren<FirstPersonMovement>();
 
-            Rigidbody rb = fpm != null ? fpm.GetComponent<Rigidbody>() : Player.GetComponent<Rigidbody>();
-            float horizSpeed = rb != null ? new Vector3(rb.linearVelocity.x, 0, rb.linearVelocity.z).magnitude : 0f;
+            Rigidbody rb = (fpm != null) ? fpm.GetComponent<Rigidbody>() : Player.GetComponent<Rigidbody>();
+            float horizSpeed = (rb != null) ? new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude : 0f;
 
             float playerNoiseRadius = 0f;
             float playerIntensity = 0f;
@@ -258,28 +276,10 @@ public class BlindEnemyAI : EnemyAI
                     intensity = playerIntensity;
                     soundSource = Player;
                     LastHeardTime = Time.time;
+                    LastHeardSoundPos = soundPos;
+                    LastSoundSource = soundSource;
                     return true;
                 }
-            }
-        }
-
-        // 2. Detección de objetos sonoros (RastreoSonoro)
-        for (int i = 0; i < RastreoSonoro.Activos.Count; i++)
-        {
-            RastreoSonoro fuente = RastreoSonoro.Activos[i];
-            if (fuente == null || !fuente.gameObject.activeInHierarchy) continue;
-
-            bool isEmittingSound = fuente.Recogido || (fuente.sonido != null && fuente.sonido.isPlaying);
-            if (!isEmittingSound) continue;
-
-            float dist = Vector3.Distance(transform.position, fuente.transform.position);
-            if (dist <= fuente.radioSonoro * hearingSensitivityMultiplier)
-            {
-                soundPos = fuente.transform.position;
-                intensity = 1.4f;
-                soundSource = fuente.transform;
-                LastHeardTime = Time.time;
-                return true;
             }
         }
 

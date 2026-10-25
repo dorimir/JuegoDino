@@ -14,7 +14,7 @@ public class WinManager : MonoBehaviour
 
     [Header("Meta")]
     [Tooltip("Posición exacta de la puerta de salida")]
-    [SerializeField] private Vector3 doorPosition = new Vector3(10.670000076293946f, 0.027003999799489976f, 77.9800033569336f);
+    [SerializeField] private Vector3 doorPosition = new Vector3(10.67f, 0.027f, 77.98f);
     [SerializeField] private GameObject finishObject;
     [SerializeField] private float finishRadius = 3.0f;
 
@@ -30,9 +30,9 @@ public class WinManager : MonoBehaviour
     [SerializeField] private float popupDuration = 1f;
     [SerializeField] private float floatDistance = 40f;
 
-    private int keysCollected = 0;
-    private bool allKeysCollected = false;
-    private bool won = false;
+    private int keysCollected;
+    private bool allKeysCollected;
+    private bool won;
     private GameObject player;
     private GameObject soundObject;
     private Collider finishCollider;
@@ -51,37 +51,35 @@ public class WinManager : MonoBehaviour
         keys.Clear();
         keys.AddRange(GameObject.FindGameObjectsWithTag("Key"));
 
-        // Garantizar que cada llave tenga el script de animación y recogida KeyPickup
         for (int i = 0; i < keys.Count; i++)
         {
-            if (keys[i] != null && keys[i].GetComponent<KeyPickup>() == null)
+            if (keys[i] != null && !keys[i].TryGetComponent<KeyPickup>(out _))
             {
                 keys[i].AddComponent<KeyPickup>();
             }
         }
 
-        // Localizar el objeto sonoro en la escena
         FindSoundObject();
 
         if (finishObject == null)
-            finishObject = GameObject.FindGameObjectWithTag("Finish");
-
-        if (finishObject == null)
         {
-            GameObject doorGo = GameObject.Find("ExitDoor") ?? GameObject.Find("Door");
-            if (doorGo != null) finishObject = doorGo;
+            finishObject = GameObject.FindGameObjectWithTag("Finish") ??
+                           GameObject.Find("ExitDoor") ??
+                           GameObject.Find("Door");
         }
 
         if (finishObject != null)
+        {
             finishCollider = finishObject.GetComponent<Collider>();
-
-        if (player == null)
-            Debug.LogWarning("WinManager: no se encontró ningún objeto con tag 'Player'.");
+        }
 
         if (keysText == null)
         {
             GameObject kc = GameObject.Find("KeyCounter");
-            if (kc != null) keysText = kc.GetComponent<TMP_Text>();
+            if (kc != null)
+            {
+                keysText = kc.GetComponent<TMP_Text>();
+            }
         }
 
         if (plusOneText != null)
@@ -90,7 +88,6 @@ public class WinManager : MonoBehaviour
             plusOneText.gameObject.SetActive(false);
         }
 
-        Debug.Log("Llaves encontradas: " + keys.Count);
         UpdateKeysUI();
     }
 
@@ -113,7 +110,6 @@ public class WinManager : MonoBehaviour
 
         Vector3 playerPos = player.transform.position;
 
-        // Recoger llaves por distancia 2D (solo hasta tener todas)
         if (!allKeysCollected)
         {
             float sqrRadius = pickupRadius * pickupRadius;
@@ -140,12 +136,8 @@ public class WinManager : MonoBehaviour
             }
         }
 
-        // Comprobar si el jugador alcanza la puerta con las 10 llaves Y el objeto sonoro
         Vector3 exitPos = finishObject != null ? finishObject.transform.position : doorPosition;
-        bool isAtDoor = IsPlayerAtFinish(playerPos, exitPos);
-        bool hasSound = HasSoundObject(playerPos, exitPos);
-
-        if (allKeysCollected && hasSound && isAtDoor)
+        if (allKeysCollected && HasSoundObject(playerPos, exitPos) && IsPlayerAtFinish(playerPos, exitPos))
         {
             won = true;
             SceneManager.LoadScene(winSceneName);
@@ -156,11 +148,9 @@ public class WinManager : MonoBehaviour
     {
         if (soundObject == null) FindSoundObject();
 
-        // 1. Verificar si el jugador lo lleva en las manos (PickUpScript)
         PickUpScript pickup = player.GetComponent<PickUpScript>() ?? player.GetComponentInChildren<PickUpScript>();
         if (pickup != null && pickup.IsHoldingSoundObject) return true;
 
-        // 2. Verificar si el objeto sonoro está junto al jugador o en la puerta
         if (soundObject != null)
         {
             float distToPlayer = Vector3.Distance(soundObject.transform.position, playerPos);
@@ -186,9 +176,10 @@ public class WinManager : MonoBehaviour
         if (allKeysCollected) return;
 
         keysCollected++;
-
         if (keysCollected >= keysNeeded)
+        {
             allKeysCollected = true;
+        }
 
         UpdateKeysUI();
 
@@ -209,32 +200,25 @@ public class WinManager : MonoBehaviour
 
         if (keysText != null)
         {
-            if (!allKeysCollected)
-            {
-                keysText.text = $"Llaves: {keysCollected} / {keysNeeded}";
-            }
-            else
-            {
-                keysText.text = exitMessage;
-            }
+            keysText.text = allKeysCollected ? exitMessage : $"Llaves: {keysCollected} / {keysNeeded}";
         }
     }
 
     private void OnGUI()
     {
-        // Si ya hay un elemento UI de Canvas (TMP_Text) activo en pantalla, evitar dibujar HUD redundante
-        if (keysText != null && keysText.gameObject.activeInHierarchy) return;
-        if (won || EnemyAI.GlobalPlayerDead) return;
+        if ((keysText != null && keysText.gameObject.activeInHierarchy) || won || EnemyAI.GlobalPlayerDead) return;
 
         Vector3 exitPos = finishObject != null ? finishObject.transform.position : doorPosition;
         Vector3 playerPos = (player != null) ? player.transform.position : Vector3.zero;
         bool hasSound = (player != null) && HasSoundObject(playerPos, exitPos);
         bool isAtDoor = (player != null) && IsPlayerAtFinish(playerPos, exitPos);
 
-        GUIStyle boxStyle = new GUIStyle(GUI.skin.box);
-        boxStyle.fontSize = 16;
-        boxStyle.fontStyle = FontStyle.Bold;
-        boxStyle.alignment = TextAnchor.MiddleCenter;
+        GUIStyle boxStyle = new GUIStyle(GUI.skin.box)
+        {
+            fontSize = 16,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter
+        };
 
         if (!allKeysCollected)
         {
@@ -265,8 +249,7 @@ public class WinManager : MonoBehaviour
             t += Time.deltaTime;
             float progress = t / popupDuration;
 
-            plusOneText.rectTransform.localPosition =
-                plusOneStartPos + Vector3.up * (floatDistance * progress);
+            plusOneText.rectTransform.localPosition = plusOneStartPos + Vector3.up * (floatDistance * progress);
             plusOneText.color = new Color(0f, 1f, 0f, 1f - progress);
 
             yield return null;

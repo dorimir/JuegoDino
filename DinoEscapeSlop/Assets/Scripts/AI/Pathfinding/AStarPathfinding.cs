@@ -1,6 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Sistema de búsqueda de caminos A* sobre el grafo de nodos del mapa.
+/// Incluye atajos y optimización por raycast, prevención de obstáculos dinámicos
+/// y fallback al nodo más cercano alcanzable si el destino está bloqueado.
+/// </summary>
 public class AStarPathfinding : MonoBehaviour
 {
     private Node[] cachedNodes;
@@ -12,15 +17,24 @@ public class AStarPathfinding : MonoBehaviour
 
     public void CacheNodes()
     {
-        cachedNodes = Object.FindObjectsByType<Node>(FindObjectsSortMode.None);
+        Node[] raw = Object.FindObjectsByType<Node>(FindObjectsSortMode.None);
+        if (raw == null)
+        {
+            cachedNodes = new Node[0];
+            return;
+        }
+
+        List<Node> valid = new List<Node>(raw.Length);
+        for (int i = 0; i < raw.Length; i++)
+        {
+            if (raw[i] != null && raw[i].gameObject.activeInHierarchy)
+            {
+                valid.Add(raw[i]);
+            }
+        }
+        cachedNodes = valid.ToArray();
     }
 
-    /// <summary>
-    /// Encuentra una ruta entre startPos y targetPos.
-    /// Utiliza el sistema de raycast para comprobar si el objetivo (o el nodo objetivo) es alcanzable
-    /// directamente desde la posición actual sin pasar por ningún nodo intermediario.
-    /// Si hay obstáculos, navega utilizando las conexiones (neighbors) de cada nodo del mapa.
-    /// </summary>
     public List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos, float clearanceRadius = 0.35f)
     {
         // 1. Raycast directo al destino: si el objetivo es directamente alcanzable desde startPos,
@@ -72,6 +86,9 @@ public class AStarPathfinding : MonoBehaviour
         Dictionary<Node, int> hCosts = new Dictionary<Node, int> { [startNode] = GetDistance(startNode, targetNode) };
         Dictionary<Node, Node> parentMap = new Dictionary<Node, Node>();
 
+        Node closestToTarget = startNode;
+        int minH = hCosts[startNode];
+
         while (openSet.Count > 0)
         {
             Node currentNode = openSet[0];
@@ -92,6 +109,12 @@ public class AStarPathfinding : MonoBehaviour
             openSet.Remove(currentNode);
             closedSet.Add(currentNode);
 
+            if (hCosts.TryGetValue(currentNode, out int curH) && curH < minH)
+            {
+                minH = curH;
+                closestToTarget = currentNode;
+            }
+
             if (currentNode == targetNode)
             {
                 List<Vector3> rawPath = RetracePath(startNode, targetNode, parentMap);
@@ -106,9 +129,11 @@ public class AStarPathfinding : MonoBehaviour
                 return OptimizePathWithRaycast(rawPath, startPos, clearanceRadius);
             }
 
+            if (currentNode.neighbors == null) continue;
+
             foreach (Node neighbor in currentNode.neighbors)
             {
-                if (neighbor == null || closedSet.Contains(neighbor)) continue;
+                if (neighbor == null || !neighbor.gameObject.activeInHierarchy || closedSet.Contains(neighbor)) continue;
 
                 int movementCostToNeighbor = gCosts[currentNode] + GetDistance(currentNode, neighbor);
 
@@ -124,6 +149,14 @@ public class AStarPathfinding : MonoBehaviour
                     }
                 }
             }
+        }
+
+        // Fallback robusto: si el destino final está desconectado o no se alcanza,
+        // devolver la mejor ruta hasta el nodo más cercano alcanzable hacia el objetivo
+        if (closestToTarget != null && closestToTarget != startNode)
+        {
+            List<Vector3> partialPath = RetracePath(startNode, closestToTarget, parentMap);
+            return OptimizePathWithRaycast(partialPath, startPos, clearanceRadius);
         }
 
         return null;
@@ -219,6 +252,24 @@ public class AStarPathfinding : MonoBehaviour
         return cachedNodes;
     }
 
+    /// <summary>
+    /// Determina si un colisionador constituye un obstáculo sólido para la navegación.
+    /// Ignora triggers, dinosaurios, jugador, llaves, objetos recogibles y suelos transitables.
+    /// </summary>
+    public static bool IsNavObstacle(Collider col)
+    {
+        if (col == null || col.isTrigger) return false;
+        if (col.CompareTag("Enemy") || col.GetComponentInParent<EnemyAI>() != null) return false;
+        if (col.CompareTag("Player") || col.GetComponentInParent<FirstPersonMovement>() != null) return false;
+        if (col.CompareTag("canPickUp") || col.CompareTag("Key")) return false;
+        if (col.GetComponentInParent<Linterna>() != null || col.GetComponentInParent<RastreoSonoro>() != null) return false;
+
+        string hitName = col.gameObject.name.ToLower();
+        if (hitName.Contains("plane") || hitName.Contains("floor") || hitName.Contains("suelo")) return false;
+
+        return true;
+    }
+
     public static bool HasClearLine(Vector3 fromPos, Vector3 toPos, float clearanceRadius = 0.35f)
     {
         float rayHeight = 0.75f;
@@ -233,13 +284,9 @@ public class AStarPathfinding : MonoBehaviour
 
         if (Physics.Linecast(origin, target, out RaycastHit lineHit, wallLayerMask, QueryTriggerInteraction.Ignore))
         {
-            if (lineHit.collider != null && !lineHit.collider.CompareTag("Enemy") && lineHit.normal.y < 0.7f)
+            if (lineHit.normal.y < 0.7f && IsNavObstacle(lineHit.collider))
             {
-                string hitName = lineHit.collider.gameObject.name.ToLower();
-                if (!hitName.Contains("plane") && !hitName.Contains("floor") && !hitName.Contains("suelo"))
-                {
-                    return false;
-                }
+                return false;
             }
         }
 
@@ -249,12 +296,14 @@ public class AStarPathfinding : MonoBehaviour
             float castDist = Mathf.Max(0.05f, dist - 0.3f);
 
             RaycastHit[] hits = Physics.SphereCastAll(fwdOrigin, clearanceRadius, dir.normalized, castDist, wallLayerMask, QueryTriggerInteraction.Ignore);
-            foreach (var hit in hits)
+            for (int i = 0; i < hits.Length; i++)
             {
-                if (hit.collider == null || hit.collider.CompareTag("Enemy") || hit.normal.y >= 0.7f) continue;
-                string colName = hit.collider.gameObject.name.ToLower();
-                if (colName.Contains("plane") || colName.Contains("floor") || colName.Contains("suelo")) continue;
-                return false;
+                RaycastHit hit = hits[i];
+                if (hit.normal.y >= 0.7f) continue;
+                if (IsNavObstacle(hit.collider))
+                {
+                    return false;
+                }
             }
         }
 
@@ -271,9 +320,10 @@ public class AStarPathfinding : MonoBehaviour
 
         if (cachedNodes == null) return reachable;
 
-        foreach (Node node in cachedNodes)
+        for (int i = 0; i < cachedNodes.Length; i++)
         {
-            if (node != null && HasClearLine(worldPos, node.transform.position))
+            Node node = cachedNodes[i];
+            if (node != null && node.gameObject.activeInHierarchy && HasClearLine(worldPos, node.transform.position))
             {
                 reachable.Add(node);
             }
@@ -296,9 +346,10 @@ public class AStarPathfinding : MonoBehaviour
         Node closestFallback = null;
         float minFallbackDistSqr = Mathf.Infinity;
 
-        foreach (Node node in cachedNodes)
+        for (int i = 0; i < cachedNodes.Length; i++)
         {
-            if (node == null) continue;
+            Node node = cachedNodes[i];
+            if (node == null || !node.gameObject.activeInHierarchy) continue;
 
             float dx = worldPos.x - node.transform.position.x;
             float dz = worldPos.z - node.transform.position.z;
@@ -336,9 +387,10 @@ public class AStarPathfinding : MonoBehaviour
         float maxDistSqr = -1f;
         Vector3 refPos = referenceNode.transform.position;
 
-        foreach (Node node in allNodes)
+        for (int i = 0; i < allNodes.Length; i++)
         {
-            if (node == null || node == referenceNode) continue;
+            Node node = allNodes[i];
+            if (node == null || !node.gameObject.activeInHierarchy || node == referenceNode) continue;
             float dx = node.transform.position.x - refPos.x;
             float dz = node.transform.position.z - refPos.z;
             float distSqr = dx * dx + dz * dz;

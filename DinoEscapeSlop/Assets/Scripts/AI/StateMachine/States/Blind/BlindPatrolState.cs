@@ -9,11 +9,6 @@ public class BlindPatrolState : PatrolState
         blindAI = ai;
     }
 
-    public override void Enter()
-    {
-        base.Enter();
-    }
-
     public override void Update()
     {
         if (CheckPerceptions()) return;
@@ -28,10 +23,9 @@ public class BlindPatrolState : PatrolState
     {
         if (blindAI != null && blindAI.CheckForSounds(out Vector3 soundPos, out float intensity, out Transform soundSource))
         {
-            if (soundSource != null)
+            if (soundSource != null && soundSource.GetComponentInParent<EnemyAI>()?.IsSmallDino == true)
             {
-                EnemyAI sourceAI = soundSource.GetComponentInParent<EnemyAI>();
-                if (sourceAI != null && sourceAI.IsSmallDino) return false;
+                return false;
             }
 
             if (intensity >= blindAI.highUrgencyThreshold)

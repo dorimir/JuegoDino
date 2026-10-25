@@ -6,31 +6,32 @@ public class FirstPersonAudio : MonoBehaviour
     public FirstPersonMovement character;
     public GroundCheck groundCheck;
 
-    [Header("Step")]
+    [Header("Pasos")]
     public AudioSource stepAudio;
     public AudioSource runningAudio;
-    [Tooltip("Minimum velocity for moving audio to play")]
-    public float velocityThreshold = .01f;
-    Vector2 lastCharacterPosition;
-    Vector2 CurrentCharacterPosition => character ? new Vector2(character.transform.position.x, character.transform.position.z) : Vector2.zero;
+    [Tooltip("Velocidad mínima para reproducir audio de movimiento.")]
+    public float velocityThreshold = 0.01f;
 
-    [Header("Landing")]
+    private Vector2 lastCharacterPosition;
+    private Vector2 CurrentCharacterPosition => character ? new Vector2(character.transform.position.x, character.transform.position.z) : Vector2.zero;
+
+    [Header("Aterrizaje")]
     public AudioSource landingAudio;
     public AudioClip[] landingSFX;
 
-    [Header("Jump")]
+    [Header("Salto")]
     public Jump jump;
     public AudioSource jumpAudio;
     public AudioClip[] jumpSFX;
 
-    [Header("Crouch")]
+    [Header("Agacharse")]
     public Crouch crouch;
     public AudioSource crouchStartAudio, crouchedAudio, crouchEndAudio;
     public AudioClip[] crouchStartSFX, crouchEndSFX;
 
-    AudioSource[] MovingAudios => new AudioSource[] { stepAudio, runningAudio, crouchedAudio };
+    private AudioSource[] movingAudios;
 
-    void Reset()
+    private void Reset()
     {
         character = GetComponentInParent<FirstPersonMovement>();
         groundCheck = (transform.parent ?? transform).GetComponentInChildren<GroundCheck>();
@@ -39,13 +40,13 @@ public class FirstPersonAudio : MonoBehaviour
         landingAudio = GetOrCreateAudioSource("Landing Audio");
 
         jump = GetComponentInParent<Jump>();
-        if (jump)
+        if (jump != null)
         {
             jumpAudio = GetOrCreateAudioSource("Jump audio");
         }
 
         crouch = GetComponentInParent<Crouch>();
-        if (crouch)
+        if (crouch != null)
         {
             crouchStartAudio = GetOrCreateAudioSource("Crouch Start Audio");
             crouchedAudio = GetOrCreateAudioSource("Crouched Audio");
@@ -53,12 +54,12 @@ public class FirstPersonAudio : MonoBehaviour
         }
     }
 
-    void Awake()
+    private void Awake()
     {
-        if (!character) character = GetComponentInParent<FirstPersonMovement>();
-        if (!groundCheck) groundCheck = (transform.parent ?? transform).GetComponentInChildren<GroundCheck>();
-        if (!jump) jump = GetComponentInParent<Jump>();
-        if (!crouch) crouch = GetComponentInParent<Crouch>();
+        if (character == null) character = GetComponentInParent<FirstPersonMovement>();
+        if (groundCheck == null) groundCheck = (transform.parent ?? transform).GetComponentInChildren<GroundCheck>();
+        if (jump == null) jump = GetComponentInParent<Jump>();
+        if (crouch == null) crouch = GetComponentInParent<Crouch>();
 
         if (stepAudio != null)
         {
@@ -83,7 +84,7 @@ public class FirstPersonAudio : MonoBehaviour
             landingAudio.spatialBlend = 0f;
         }
 
-        if (!jumpAudio)
+        if (jumpAudio == null)
         {
             jumpAudio = GetOrCreateAudioSource("Jump Audio");
         }
@@ -92,7 +93,8 @@ public class FirstPersonAudio : MonoBehaviour
             jumpAudio.spatialBlend = 0f;
         }
 
-        // Auto-cargar clips si los arrays vinieron vacíos del prefab
+        movingAudios = new AudioSource[] { stepAudio, runningAudio, crouchedAudio };
+
         if (jumpSFX == null || jumpSFX.Length == 0)
         {
             jumpSFX = Resources.FindObjectsOfTypeAll<AudioClip>()
@@ -115,21 +117,20 @@ public class FirstPersonAudio : MonoBehaviour
         }
     }
 
-    void OnEnable() => SubscribeToEvents();
+    private void OnEnable() => SubscribeToEvents();
 
-    void OnDisable() => UnsubscribeToEvents();
+    private void OnDisable() => UnsubscribeToEvents();
 
-    void FixedUpdate()
+    private void FixedUpdate()
     {
-        if (!character) return;
+        if (character == null) return;
 
-        // Play moving audio if the character is moving and on the ground.
         float velocity = Vector3.Distance(CurrentCharacterPosition, lastCharacterPosition);
-        bool isGrounded = (groundCheck && groundCheck.isGrounded) || (character != null && character.IsGrounded());
+        bool isGrounded = (groundCheck != null && groundCheck.isGrounded) || character.IsGrounded();
 
         if (velocity >= velocityThreshold && isGrounded)
         {
-            bool isCrouched = (crouch != null && crouch.IsCrouched) || (character != null && character.IsCrouched);
+            bool isCrouched = (crouch != null && crouch.IsCrouched) || character.IsCrouched;
             if (isCrouched)
             {
                 if (crouchedAudio != null)
@@ -150,7 +151,6 @@ public class FirstPersonAudio : MonoBehaviour
                 }
                 else if (stepAudio != null)
                 {
-                    // Fallback para correr: pasos a mayor ritmo y pitch
                     stepAudio.pitch = 1.35f;
                     SetPlayingMovingAudio(stepAudio);
                 }
@@ -172,12 +172,13 @@ public class FirstPersonAudio : MonoBehaviour
         lastCharacterPosition = CurrentCharacterPosition;
     }
 
-    void SetPlayingMovingAudio(AudioSource audioToPlay)
+    private void SetPlayingMovingAudio(AudioSource audioToPlay)
     {
-        AudioSource[] audios = MovingAudios;
-        for (int i = 0; i < audios.Length; i++)
+        if (movingAudios == null) return;
+
+        for (int i = 0; i < movingAudios.Length; i++)
         {
-            AudioSource a = audios[i];
+            AudioSource a = movingAudios[i];
             if (a != null && a != audioToPlay && a.isPlaying)
             {
                 a.Pause();
@@ -190,91 +191,87 @@ public class FirstPersonAudio : MonoBehaviour
         }
     }
 
-    #region Play instant-related audios.
-    void PlayLandingAudio() => PlayRandomClip(landingAudio, landingSFX);
-    void PlayJumpAudio() => PlayRandomClip(jumpAudio, jumpSFX);
-    void PlayCrouchStartAudio() => PlayRandomClip(crouchStartAudio, crouchStartSFX);
-    void PlayCrouchEndAudio() => PlayRandomClip(crouchEndAudio, crouchEndSFX);
-    #endregion
+    private void PlayLandingAudio() => PlayRandomClip(landingAudio, landingSFX);
+    private void PlayJumpAudio() => PlayRandomClip(jumpAudio, jumpSFX);
+    private void PlayCrouchStartAudio() => PlayRandomClip(crouchStartAudio, crouchStartSFX);
+    private void PlayCrouchEndAudio() => PlayRandomClip(crouchEndAudio, crouchEndSFX);
 
-    #region Subscribe/unsubscribe to events.
-    void SubscribeToEvents()
+    private void SubscribeToEvents()
     {
-        if (groundCheck) groundCheck.Grounded += PlayLandingAudio;
+        if (groundCheck != null) groundCheck.Grounded += PlayLandingAudio;
 
-        if (jump)
+        if (jump != null)
         {
             jump.Jumped += PlayJumpAudio;
         }
-        else if (character)
+        else if (character != null)
         {
             character.Jumped += PlayJumpAudio;
         }
 
-        if (crouch)
+        if (crouch != null)
         {
             crouch.CrouchStart += PlayCrouchStartAudio;
             crouch.CrouchEnd += PlayCrouchEndAudio;
         }
-        else if (character)
+        else if (character != null)
         {
             character.CrouchStart += PlayCrouchStartAudio;
             character.CrouchEnd += PlayCrouchEndAudio;
         }
     }
 
-    void UnsubscribeToEvents()
+    private void UnsubscribeToEvents()
     {
-        if (groundCheck) groundCheck.Grounded -= PlayLandingAudio;
+        if (groundCheck != null) groundCheck.Grounded -= PlayLandingAudio;
 
-        if (jump)
+        if (jump != null)
         {
             jump.Jumped -= PlayJumpAudio;
         }
-        else if (character)
+        else if (character != null)
         {
             character.Jumped -= PlayJumpAudio;
         }
 
-        if (crouch)
+        if (crouch != null)
         {
             crouch.CrouchStart -= PlayCrouchStartAudio;
             crouch.CrouchEnd -= PlayCrouchEndAudio;
         }
-        else if (character)
+        else if (character != null)
         {
             character.CrouchStart -= PlayCrouchStartAudio;
             character.CrouchEnd -= PlayCrouchEndAudio;
         }
     }
-    #endregion
 
-    #region Utility.
-    AudioSource GetOrCreateAudioSource(string name)
+    private AudioSource GetOrCreateAudioSource(string name)
     {
         AudioSource result = System.Array.Find(GetComponentsInChildren<AudioSource>(), a => a.name == name);
-        if (result)
-            return result;
+        if (result != null) return result;
 
         result = new GameObject(name).AddComponent<AudioSource>();
-        result.spatialBlend = 1;
+        result.spatialBlend = 1f;
         result.playOnAwake = false;
         result.transform.SetParent(transform, false);
         return result;
     }
 
-    static void PlayRandomClip(AudioSource audio, AudioClip[] clips)
+    private static void PlayRandomClip(AudioSource audio, AudioClip[] clips)
     {
-        if (!audio || clips == null || clips.Length <= 0)
-            return;
+        if (audio == null || clips == null || clips.Length <= 0) return;
 
         AudioClip clip = clips[Random.Range(0, clips.Length)];
         if (clips.Length > 1)
+        {
             while (clip == audio.clip)
+            {
                 clip = clips[Random.Range(0, clips.Length)];
+            }
+        }
 
         audio.clip = clip;
         audio.Play();
     }
-    #endregion 
 }

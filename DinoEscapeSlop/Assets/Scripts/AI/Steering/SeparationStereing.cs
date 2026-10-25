@@ -3,11 +3,11 @@ using UnityEngine;
 
 public class SeparationSteering : MonoBehaviour
 {
-    [Header("Parametros de Steering")]
+    [Header("ParÃ¡metros de Steering")]
     public float maxSpeed = 5f;
     public float maxForce = 10f;
 
-    [Header("Separacion")]
+    [Header("SeparaciÃ³n")]
     public float separationRadius = 2.5f;
     public float separationWeight = 3f;
 
@@ -46,8 +46,9 @@ public class SeparationSteering : MonoBehaviour
 
         if (allies == null) return force;
 
-        foreach (var ally in allies)
+        for (int i = 0; i < allies.Count; i++)
         {
+            Transform ally = allies[i];
             if (ally == null || ally == transform) continue;
 
             Vector3 pushAway = transform.position - ally.position;
@@ -56,7 +57,7 @@ public class SeparationSteering : MonoBehaviour
 
             if (distance > 0.001f && distance < separationRadius)
             {
-                force += (pushAway.normalized / distance);
+                force += pushAway.normalized / distance;
                 count++;
             }
         }
@@ -78,4 +79,11 @@ public class SeparationSteering : MonoBehaviour
         Gizmos.color = Color.red;
         Gizmos.DrawWireSphere(transform.position, separationRadius);
     }
+}
+
+/// <summary>
+/// Alias compatible con el nombre del archivo SeparationStereing.cs.
+/// </summary>
+public class SeparationStereing : SeparationSteering
+{
 }

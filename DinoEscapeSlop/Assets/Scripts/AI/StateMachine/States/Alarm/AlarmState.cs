@@ -2,10 +2,8 @@ using UnityEngine;
 
 /// <summary>
 /// Estado de alarma para el dinosaurio avisador (AlarmEnemyAI).
-/// Hereda de ChaseState. A diferencia del dinosaurio básico que persigue al jugador,
-/// este estado detiene el movimiento del dinosaurio por completo, lo mantiene quieto
-/// encarando al jugador y difunde la posición del jugador a todos los dinosaurios
-/// dentro del radio de alarma (medio mapa) para que acudan en modo persecución (chase).
+/// Detiene el movimiento del dinosaurio por completo, lo mantiene quieto
+/// encarando al jugador y difunde la posición del jugador a los demás dinosaurios.
 /// </summary>
 public class AlarmState : ChaseState, IPriorityState
 {
@@ -25,10 +23,8 @@ public class AlarmState : ChaseState, IPriorityState
         lostSightTimer = 0f;
         broadcastTimer = 0f;
 
-        // Establecer estado visual de alerta (tonalidad violeta / emisión)
-        ai.SetVisualState(EnemyAI.DinoVisualState.Alert);
+        ai.SetVisualState(EnemyAI.DinoVisualState.Alarm);
 
-        // Quedarse quieto en el lugar: cancelar rutas y detener velocidad
         if (ai.Movement != null)
         {
             ai.Movement.ClearPath();
@@ -37,16 +33,8 @@ public class AlarmState : ChaseState, IPriorityState
         }
 
         ai.EnsurePlayerReference();
-        if (ai.Player != null)
-        {
-            lastKnownTargetPos = ai.Player.position;
-        }
-        else
-        {
-            lastKnownTargetPos = ai.transform.position;
-        }
+        lastKnownTargetPos = (ai.Player != null) ? ai.Player.position : ai.transform.position;
 
-        // Iniciar sonido de alarma y difundir el aviso inmediato a los dinosaurios en rango
         if (alarmAI != null)
         {
             alarmAI.PlayAlarmAudio();
@@ -63,14 +51,12 @@ public class AlarmState : ChaseState, IPriorityState
             return;
         }
 
-        // Asegurar que el dinosaurio permanezca quieto durante toda la alerta
         if (ai.Movement != null)
         {
             ai.Movement.ClearPath();
             ai.Movement.ResetVelocity();
         }
 
-        // Si el jugador se aproxima demasiado a su boca/rango de ataque, lo elimina
         float distToPlayer = Vector2.Distance(
             new Vector2(ai.transform.position.x, ai.transform.position.z),
             new Vector2(ai.Player.position.x, ai.Player.position.z)
@@ -83,7 +69,6 @@ public class AlarmState : ChaseState, IPriorityState
             return;
         }
 
-        // Girar en el sitio orientando el frente hacia el jugador
         Vector3 toPlayer = ai.Player.position - ai.transform.position;
         toPlayer.y = 0f;
         if (toPlayer.sqrMagnitude > 0.001f)
@@ -99,7 +84,6 @@ public class AlarmState : ChaseState, IPriorityState
             lostSightTimer = 0f;
             lastKnownTargetPos = ai.Player.position;
 
-            // Transmisión periódica a los dinosaurios perseguidores para actualizar la posición
             broadcastTimer -= Time.deltaTime;
             if (broadcastTimer <= 0f)
             {
@@ -114,20 +98,17 @@ public class AlarmState : ChaseState, IPriorityState
         }
         else
         {
-            // El jugador ha salido del cono o se ha ocultado tras una cobertura
             lostSightTimer += Time.deltaTime;
             float maxLost = (alarmAI != null && alarmAI.lostSightDuration > 0f) ? alarmAI.lostSightDuration : 4.0f;
             if (lostSightTimer >= maxLost)
             {
                 EndChase();
-                return;
             }
         }
     }
 
     protected override void MoveTowardsTarget(Vector3 targetPos, bool isTargetVisible)
     {
-        // En este enemigo no hay desplazamiento hacia el objetivo; permanece inmóvil
     }
 
     public override void EndChase()

@@ -1,31 +1,31 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using UnityEngine;
 
 public class FirstPersonMovement : MonoBehaviour
 {
     [Header("Velocidad de Movimiento")]
     [Tooltip("Velocidad normal de movimiento (caminar/strafe con WASD).")]
-    public float speed = 5.5f;
+    public float speed = 8.5f;
 
     [Tooltip("Velocidad al esprintar (activada con doble toque en W).")]
-    public float runSpeed = 9f;
+    public float runSpeed = 13.5f;
 
     [Tooltip("Velocidad en modo sigilo / agachado (manteniendo Shift).")]
-    public float crouchSpeed = 2.6f;
+    public float crouchSpeed = 4.2f;
 
     [Header("Respuesta y Suavizado WASD")]
-    [Tooltip("Aceleración al empezar a moverse o acelerar.")]
-    public float acceleration = 35f;
+    [Tooltip("AceleraciÃ³n al empezar a moverse o acelerar.")]
+    public float acceleration = 50f;
 
     [Tooltip("Frenado suave al soltar las teclas WASD.")]
-    public float deceleration = 30f;
+    public float deceleration = 45f;
 
-    [Tooltip("Multiplicador de respuesta al cambiar rápidamente de dirección (ej: de A a D).")]
+    [Tooltip("Multiplicador de respuesta al cambiar rÃ¡pidamente de direcciÃ³n (ej: de A a D).")]
     public float directionChangeMultiplier = 2.0f;
 
     [Header("Correr (Doble toque en W)")]
     public bool canRun = true;
-    [Tooltip("Tiempo máximo en segundos entre dos pulsaciones de W para activar correr.")]
+    [Tooltip("Tiempo mÃ¡ximo en segundos entre dos pulsaciones de W para activar correr.")]
     public float doubleTapThreshold = 0.28f;
     public bool IsRunning { get; private set; }
 
@@ -35,10 +35,10 @@ public class FirstPersonMovement : MonoBehaviour
     public KeyCode secondaryCrouchKey = KeyCode.RightShift;
     public bool IsCrouched { get; private set; }
 
-    [Tooltip("Velocidad de transición suave de cámara y collider.")]
+    [Tooltip("Velocidad de transiciÃ³n suave de cÃ¡mara y collider.")]
     public float crouchTransitionSpeed = 10f;
 
-    [Tooltip("Transform de la cabeza/cámara para agacharse.")]
+    [Tooltip("Transform de la cabeza/cÃ¡mara para agacharse.")]
     public Transform headToLower;
 
     [Tooltip("Multiplicador de altura de la cabeza al agacharse.")]
@@ -53,7 +53,7 @@ public class FirstPersonMovement : MonoBehaviour
     public float crouchColliderRatio = 0.55f;
 
     [Header("Sigilo")]
-    [Tooltip("Multiplicador del rango de detección de los dinosaurios al ir en sigilo.")]
+    [Tooltip("Multiplicador del rango de detecciÃ³n de los dinosaurios al ir en sigilo.")]
     [Range(0.1f, 1f)]
     public float stealthDetectionMultiplier = 0.5f;
 
@@ -70,7 +70,7 @@ public class FirstPersonMovement : MonoBehaviour
     public event System.Action CrouchStart;
     public event System.Action CrouchEnd;
 
-    // Compatibilidad hacia atrás
+    // Compatibilidad hacia atrÃ¡s
     new Rigidbody rigidbody;
     public KeyCode runningKey = KeyCode.None;
 
@@ -93,20 +93,20 @@ public class FirstPersonMovement : MonoBehaviour
     {
         rigidbody = GetComponent<Rigidbody>();
 
-        // Autodetectar cámara si no está asignada
+        // Autodetectar cÃ¡mara si no estÃ¡ asignada
         if (!headToLower)
         {
             Camera cam = GetComponentInChildren<Camera>();
             if (cam != null) headToLower = cam.transform;
         }
 
-        // Autodetectar collider si no está asignado
+        // Autodetectar collider si no estÃ¡ asignado
         if (!colliderToLower)
         {
             colliderToLower = GetComponent<CapsuleCollider>();
         }
 
-        // Autodetectar groundCheck si no está asignado
+        // Autodetectar groundCheck si no estÃ¡ asignado
         if (!groundCheck)
         {
             groundCheck = GetComponentInChildren<GroundCheck>();
@@ -132,25 +132,27 @@ public class FirstPersonMovement : MonoBehaviour
 
     void Update()
     {
-        // 1. Muestrear entradas WASD en Update para respuesta instantánea sin pérdida de frames
+        if (EnemyAI.GlobalPlayerDead) return;
+        // 1. Muestrear entradas WASD en Update para respuesta instantÃ¡nea sin pÃ©rdida de frames
         SampleWASDInput();
 
-        // 2. Lógica de correr por doble toque en W
+        // 2. LÃ³gica de correr por doble toque en W
         HandleDoubleTapRun();
 
-        // 3. Lógica de agacharse con Shift
+        // 3. LÃ³gica de agacharse con Shift
         HandleCrouch();
 
-        // 4. Lógica de salto con Espacio
+        // 4. LÃ³gica de salto con Espacio
         HandleJump();
 
-        // 5. Animación suave de cámara y collider
+        // 5. AnimaciÃ³n suave de cÃ¡mara y collider
         UpdateCrouchVisuals();
     }
 
     void FixedUpdate()
     {
-        // 1. Determinar velocidad objetivo según el estado
+        if (EnemyAI.GlobalPlayerDead) return;
+        // 1. Determinar velocidad objetivo segÃºn el estado
         float targetSpeed = speed;
 
         if (IsCrouched)
@@ -169,7 +171,7 @@ public class FirstPersonMovement : MonoBehaviour
 
         Vector2 targetVelocity = inputVector * targetSpeed;
 
-        // 2. Aceleración con respuesta ágil a cambios de dirección (ej: de A a D)
+        // 2. AceleraciÃ³n con respuesta Ã¡gil a cambios de direcciÃ³n (ej: de A a D)
         float currentRate;
         if (targetVelocity.sqrMagnitude > 0.001f)
         {
@@ -183,7 +185,7 @@ public class FirstPersonMovement : MonoBehaviour
 
         currentVelocity2D = Vector2.MoveTowards(currentVelocity2D, targetVelocity, currentRate * Time.fixedDeltaTime);
 
-        // 3. Desplazamiento libre relativo a la orientación del personaje (A/D = lateral, W/S = frontal)
+        // 3. Desplazamiento libre relativo a la orientaciÃ³n del personaje (A/D = lateral, W/S = frontal)
         Vector3 forward = transform.forward;
         Vector3 right = transform.right;
         forward.y = 0f;
@@ -199,7 +201,7 @@ public class FirstPersonMovement : MonoBehaviour
 
     private void SampleWASDInput()
     {
-        // Detección directa de teclas WASD y flechas (garantiza respuesta 100% inmediata)
+        // DetecciÃ³n directa de teclas WASD y flechas (garantiza respuesta 100% inmediata)
         float h = 0f;
         if (Input.GetKey(KeyCode.D) || Input.GetKey(KeyCode.RightArrow)) h += 1f;
         if (Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.LeftArrow)) h -= 1f;
@@ -229,7 +231,7 @@ public class FirstPersonMovement : MonoBehaviour
             return;
         }
 
-        // Doble toque rápido en W para empezar a correr
+        // Doble toque rÃ¡pido en W para empezar a correr
         if (Input.GetKeyDown(KeyCode.W))
         {
             float timeSinceLastW = Time.time - lastWPressTime;
@@ -240,7 +242,7 @@ public class FirstPersonMovement : MonoBehaviour
             lastWPressTime = Time.time;
         }
 
-        // Si suelta W, deja de correr (pero puede seguir desplazándose con A, S, D a velocidad normal)
+        // Si suelta W, deja de correr (pero puede seguir desplazÃ¡ndose con A, S, D a velocidad normal)
         if (IsRunning && !Input.GetKey(KeyCode.W))
         {
             IsRunning = false;
@@ -309,7 +311,7 @@ public class FirstPersonMovement : MonoBehaviour
     {
         if (hasSeparateCrouchComponent) return;
 
-        // Transición suave de cámara
+        // TransiciÃ³n suave de cÃ¡mara
         if (headToLower != null && hasHeadDefault)
         {
             float targetHeadY = IsCrouched ? (defaultHeadY * crouchHeadRatio) : defaultHeadY;
@@ -317,7 +319,7 @@ public class FirstPersonMovement : MonoBehaviour
             headToLower.localPosition = new Vector3(headToLower.localPosition.x, newHeadY, headToLower.localPosition.z);
         }
 
-        // Transición suave de collider
+        // TransiciÃ³n suave de collider
         if (colliderToLower != null && hasColliderDefault)
         {
             float targetHeight = IsCrouched ? (defaultColliderHeight * crouchColliderRatio) : defaultColliderHeight;
@@ -340,6 +342,6 @@ public class FirstPersonMovement : MonoBehaviour
             checkDistance = (colliderToLower.height * 0.5f) + 0.15f;
         }
 
-        return Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, checkDistance);
+        return Physics.Raycast(transform.position + Vector3.up * 0.1f, Vector3.down, checkDistance, ~0, QueryTriggerInteraction.Ignore);
     }
 }

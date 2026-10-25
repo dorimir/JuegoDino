@@ -8,28 +8,44 @@ public class Linterna : MonoBehaviour
     [Header("Cono de Luz")]
     public float alcance = 12f;
     [Range(5f, 120f)] public float anguloCono = 45f;
-    [Tooltip("Punto desde el que sale la luz. Si está vacío usa el propio objeto. Su eje Z azul debe apuntar por donde sale la luz.")]
+    [Tooltip("Punto desde el que sale la luz. Si está vacío usa el propio objeto.")]
     public Transform origen;
 
-    [Header("Posición en la mano")]
-    [Tooltip("Inclinación extra respecto a mirar recto (X positivo = apunta un poco hacia abajo).")]
-    public Vector3 inclinacionEnMano = Vector3.zero;
+    [Header("Posición en la Mano")]
+    [Tooltip("Offset relativo a la cámara cuando está sostenida en mano (primera persona).")]
+    public Vector3 offsetEnMano = new Vector3(0.28f, -0.22f, 0.52f);
+    [Tooltip("Inclinación extra respecto a mirar recto.")]
+    public Vector3 inclinacionEnMano = new Vector3(0f, -2f, 0f);
 
     [Header("Control")]
     public KeyCode teclaToggle = KeyCode.Mouse0;
     public bool encendida;
     public bool soloSiRecogida = true;
 
-    [Header("Luz visual (Spot Light)")]
+    [Header("Luz Visual (Spot Light)")]
     public Light luz;
     public float intensidad = 200f;
 
+    [Header("Sonido de Caída / Impacto")]
+    public float radioSonidoCaida = 22f;
+    public float intensidadSonidoCaida = 2.0f;
+    public float duracionAlertaCaida = 4.5f;
+
+    public static bool HayImpactoReciente { get; private set; }
+    public static Vector3 PosicionUltimoImpacto { get; private set; }
+    public static float TiempoUltimoImpacto { get; private set; }
+    public static Transform TransformLinterna { get; private set; }
+
+    private AudioSource audioImpacto;
+    private AudioClip clipImpacto;
+    private float ultimoTiempoImpacto;
     private int holdLayer;
     private readonly Dictionary<EnemyAI, float> lastIlluminatedTimes = new Dictionary<EnemyAI, float>();
+    private PickUpScript cachedPickup;
+    private Transform cachedPlayerTransform;
 
     public Transform Origen => origen != null ? origen : transform;
 
-    // Rotación que debe tener el objeto para que su Origen mire hacia delante
     public Quaternion RotacionEnMano(Quaternion holdRot)
     {
         Quaternion relOrigen = Quaternion.Inverse(transform.rotation) * Origen.rotation;
@@ -38,6 +54,7 @@ public class Linterna : MonoBehaviour
 
     private void Awake()
     {
+        TransformLinterna = transform;
         holdLayer = LayerMask.NameToLayer("holdLayer");
         soloSiRecogida = true;
         teclaToggle = KeyCode.Mouse0;
@@ -54,28 +71,64 @@ public class Linterna : MonoBehaviour
             luz.enabled = false;
         }
 
-        SetModelColorGray();
+        audioImpacto = GetComponent<AudioSource>();
+        if (audioImpacto == null)
+        {
+            audioImpacto = gameObject.AddComponent<AudioSource>();
+            audioImpacto.spatialBlend = 1.0f;
+            audioImpacto.minDistance = 2f;
+            audioImpacto.maxDistance = 25f;
+            audioImpacto.rolloffMode = AudioRolloffMode.Linear;
+            audioImpacto.playOnAwake = false;
+        }
+
+        clipImpacto = Resources.Load<AudioClip>("Audio/SFX_Linterna_Impacto");
+        if (clipImpacto != null)
+        {
+            audioImpacto.clip = clipImpacto;
+        }
+    }
+
+    [Header("Posición de Spawn")]
+    public static readonly Vector3 PosicionSpawnOriginal = new Vector3(-125.6f, 2.1f, 32.8f);
+
+    public void ResetearPosicionYEstado()
+    {
+        transform.position = PosicionSpawnOriginal;
+        transform.rotation = Quaternion.identity;
+        transform.localScale = Vector3.one;
+        encendida = false;
+        if (luz != null)
+        {
+            luz.enabled = false;
+            luz.transform.position = transform.position + transform.forward * 0.15f;
+            luz.transform.rotation = transform.rotation;
+        }
+        Encendidas.Remove(this);
+
+        if (TryGetComponent<Rigidbody>(out var rb))
+        {
+            rb.linearVelocity = Vector3.zero;
+            rb.angularVelocity = Vector3.zero;
+            rb.isKinematic = false;
+            rb.detectCollisions = true;
+        }
+
+        gameObject.layer = 0;
+        HayImpactoReciente = false;
     }
 
     private void Start()
     {
-        soloSiRecogida = true;
-        SetModelColorGray();
-    }
-
-    private void SetModelColorGray()
-    {
-        Renderer rend = GetComponent<Renderer>();
-        if (rend == null) rend = GetComponentInChildren<Renderer>();
-        if (rend != null)
-        {
-            rend.material.color = new Color(0.52f, 0.52f, 0.54f, 1f);
-        }
+        ResetearPosicionYEstado();
     }
 
     private void OnDestroy()
     {
-        if (luz != null) Destroy(luz.gameObject);
+        if (luz != null)
+        {
+            Destroy(luz.gameObject);
+        }
     }
 
     private void OnDisable()
@@ -86,20 +139,15 @@ public class Linterna : MonoBehaviour
     public bool EnLaMano()
     {
         if (holdLayer >= 0 && gameObject.layer == holdLayer) return true;
-        PickUpScript pickup = Object.FindAnyObjectByType<PickUpScript>();
-        if (pickup != null && (pickup.HeldObj == gameObject || (pickup.HeldObj != null && transform.IsChildOf(pickup.HeldObj.transform))))
-        {
-            return true;
-        }
-        return false;
+
+        if (cachedPickup == null) cachedPickup = Object.FindAnyObjectByType<PickUpScript>();
+        return cachedPickup != null && (cachedPickup.HeldObj == gameObject || (cachedPickup.HeldObj != null && transform.IsChildOf(cachedPickup.HeldObj.transform)));
     }
 
     private void Update()
     {
         bool inHand = EnLaMano();
 
-        // Solo se puede encender cuando la tengas en la mano.
-        // Si no está en la mano, se apaga de inmediato si estaba encendida.
         if (!inHand)
         {
             if (encendida)
@@ -107,6 +155,11 @@ public class Linterna : MonoBehaviour
                 encendida = false;
                 if (luz != null) luz.enabled = false;
                 Encendidas.Remove(this);
+            }
+
+            if (HayImpactoReciente && Time.time - TiempoUltimoImpacto > duracionAlertaCaida)
+            {
+                HayImpactoReciente = false;
             }
             return;
         }
@@ -118,21 +171,20 @@ public class Linterna : MonoBehaviour
             if (encendida)
             {
                 if (!Encendidas.Contains(this)) Encendidas.Add(this);
-                // Al encender la linterna, comprobar inmediatamente a quién se apunta
                 CheckIlluminatedDinosaurs();
             }
             else
             {
-                if (Encendidas.Contains(this)) Encendidas.Remove(this);
-                // Al apagar la linterna tras haber apuntado a los dinosaurios en su cono de visión,
-                // tanto el grande como el pequeño huyen del jugador!
+                Encendidas.Remove(this);
                 TriggerFleeForIlluminatedDinosaurs();
             }
         }
 
-        if (luz != null) luz.enabled = encendida;
+        if (luz != null)
+        {
+            luz.enabled = encendida;
+        }
 
-        // Mientras esté encendida en la mano, verificar dinos apuntados dentro de su cono de visión
         if (encendida)
         {
             CheckIlluminatedDinosaurs();
@@ -144,14 +196,86 @@ public class Linterna : MonoBehaviour
         if (luz == null) return;
 
         luz.gameObject.layer = 0;
-        luz.transform.position = Origen.position;
+        luz.transform.position = Origen.position + Origen.forward * 0.15f;
         luz.transform.rotation = Origen.rotation;
     }
 
-    /// <summary>
-    /// Comprueba qué dinosaurios están siendo apuntados por el haz de la linterna
-    /// y frente a los cuales el jugador está dentro de su cono de visión.
-    /// </summary>
+    private void OnCollisionEnter(Collision collision)
+    {
+        if (EnLaMano()) return;
+        if (collision.collider.CompareTag("Player") || collision.transform.root.CompareTag("Player")) return;
+        if (Time.timeSinceLevelLoad < 1.0f) return;
+
+        float impactVel = collision.relativeVelocity.magnitude;
+        if (impactVel < 0.35f && (Time.time - ultimoTiempoImpacto < 0.4f)) return;
+        if (Time.time - ultimoTiempoImpacto < 0.25f) return;
+
+        ultimoTiempoImpacto = Time.time;
+        EmitirSonidoCaida();
+    }
+
+    public void EmitirSonidoCaida()
+    {
+        HayImpactoReciente = true;
+        PosicionUltimoImpacto = transform.position;
+        TiempoUltimoImpacto = Time.time;
+        TransformLinterna = transform;
+
+        if (audioImpacto != null)
+        {
+            if (clipImpacto == null) clipImpacto = Resources.Load<AudioClip>("Audio/SFX_Linterna_Impacto");
+            if (clipImpacto != null)
+            {
+                audioImpacto.pitch = Random.Range(0.85f, 1.15f);
+                audioImpacto.PlayOneShot(clipImpacto, 1.0f);
+            }
+        }
+
+        NotificarImpactoACiegos(transform.position, radioSonidoCaida, intensidadSonidoCaida);
+    }
+
+    public static void NotificarImpactoACiegos(Vector3 pos, float radio, float intensidad)
+    {
+        if (EnemyAI.AllEnemies == null) return;
+        for (int i = 0; i < EnemyAI.AllEnemies.Count; i++)
+        {
+            EnemyAI enemy = EnemyAI.AllEnemies[i];
+            if (enemy is BlindEnemyAI blind && blind.gameObject.activeInHierarchy)
+            {
+                float dist = Vector3.Distance(blind.transform.position, pos);
+                if (dist <= radio * blind.hearingSensitivityMultiplier)
+                {
+                    blind.NotificarSonidoPrioritario(pos, intensidad, TransformLinterna);
+                }
+            }
+        }
+    }
+
+    public static bool HaySonidoCaidaActivo(Vector3 listenerPos, float multiplier, out Vector3 soundPos, out float intensity, out Transform soundSource)
+    {
+        soundPos = Vector3.zero;
+        intensity = 0f;
+        soundSource = null;
+
+        if (!HayImpactoReciente) return false;
+        if (Time.time - TiempoUltimoImpacto > 4.5f)
+        {
+            HayImpactoReciente = false;
+            return false;
+        }
+
+        float dist = Vector3.Distance(listenerPos, PosicionUltimoImpacto);
+        if (dist <= 22f * multiplier)
+        {
+            soundPos = PosicionUltimoImpacto;
+            intensity = 2.0f; // Prioridad alta, superior al ruido de pasos
+            soundSource = TransformLinterna;
+            return true;
+        }
+
+        return false;
+    }
+
     private void CheckIlluminatedDinosaurs()
     {
         if (EnemyAI.AllEnemies == null || EnemyAI.AllEnemies.Count == 0) return;
@@ -164,45 +288,50 @@ public class Linterna : MonoBehaviour
         {
             EnemyAI dino = EnemyAI.AllEnemies[i];
             if (dino == null || !dino.gameObject.activeInHierarchy) continue;
+            if (dino is BlindEnemyAI || dino.dinoCiego) continue; // El dinosaurio ciego no ve la luz y no entra en huida
 
-            // 1. Distancia
             Vector3 dinoEye = dino.transform.position + Vector3.up * dino.eyeHeight;
-            Vector3 toDino = dinoEye - originPos;
+            Vector3 dinoCenter = dino.transform.position + Vector3.up * Mathf.Max(0.25f, dino.eyeHeight * 0.5f);
+
+            Vector3 toDino = dinoCenter - originPos;
             float dist = toDino.magnitude;
             if (dist > alcance || dist < 0.2f) continue;
 
-            // 2. Apuntándole con el haz de la linterna
             float angleFromBeam = Vector3.Angle(originFwd, toDino.normalized);
             if (angleFromBeam > anguloCono * 0.5f) continue;
 
-            // 3. Línea de visión no obstruida por muros
-            if (Physics.Linecast(originPos, dinoEye, out RaycastHit hit, wallMask, QueryTriggerInteraction.Ignore))
+            // Comprobar visión directa hacia el dinosaurio (evitar oclusión por muros)
+            bool occluded = true;
+            if (!Physics.Linecast(originPos, dinoEye, out RaycastHit hit, wallMask, QueryTriggerInteraction.Ignore))
             {
-                if (hit.transform != dino.transform && !hit.transform.IsChildOf(dino.transform) && !dino.transform.IsChildOf(hit.transform))
-                {
-                    continue;
-                }
+                occluded = false;
+            }
+            else if (hit.transform == dino.transform || hit.transform.IsChildOf(dino.transform) || dino.transform.IsChildOf(hit.transform))
+            {
+                occluded = false;
+            }
+            else if (!Physics.Linecast(originPos, dinoCenter, out RaycastHit hitCenter, wallMask, QueryTriggerInteraction.Ignore))
+            {
+                occluded = false;
+            }
+            else if (hitCenter.transform == dino.transform || hitCenter.transform.IsChildOf(dino.transform) || dino.transform.IsChildOf(hitCenter.transform))
+            {
+                occluded = false;
             }
 
-            // 4. ¿Está el jugador dentro del cono de visión del dinosaurio?
-            Vector3 dinoToPlayer = originPos - dino.transform.position;
-            dinoToPlayer.y = 0f;
-            if (dinoToPlayer.sqrMagnitude < 0.001f) continue;
+            if (occluded) continue;
 
-            float angleFromDino = Vector3.Angle(dino.transform.forward, dinoToPlayer.normalized);
-            float maxDinoCone = dino.GetVisionOrFacingCone();
+            lastIlluminatedTimes[dino] = Time.time;
 
-            if (angleFromDino <= maxDinoCone * 0.5f)
+            // Todos los dinosaurios excepto el ciego entran en estado de huida si les da con la linterna
+            if (dino.StateMachine != null && dino.StateMachine.CurrentState != dino.FleeState)
             {
-                lastIlluminatedTimes[dino] = Time.time;
+                Transform pTransform = GetPlayerTransform();
+                dino.TriggerScaredByLight(pTransform);
             }
         }
     }
 
-    /// <summary>
-    /// Provoca la huida de todos los dinosaurios que hayan sido apuntados con la linterna
-    /// en su cono de visión antes de apagarla (enciende y apaga).
-    /// </summary>
     private void TriggerFleeForIlluminatedDinosaurs()
     {
         Transform playerTransform = GetPlayerTransform();
@@ -212,6 +341,7 @@ public class Linterna : MonoBehaviour
         foreach (var kvp in lastIlluminatedTimes)
         {
             EnemyAI dino = kvp.Key;
+            if (dino == null || dino is BlindEnemyAI || dino.dinoCiego) continue;
             float timeSinceIlluminated = now - kvp.Value;
 
             if (dino != null && dino.gameObject.activeInHierarchy && timeSinceIlluminated <= 2.5f)
@@ -233,14 +363,28 @@ public class Linterna : MonoBehaviour
 
     private Transform GetPlayerTransform()
     {
-        PickUpScript pickup = Object.FindAnyObjectByType<PickUpScript>();
-        if (pickup != null) return pickup.transform.root;
+        if (cachedPlayerTransform != null) return cachedPlayerTransform;
+
+        if (cachedPickup == null) cachedPickup = Object.FindAnyObjectByType<PickUpScript>();
+        if (cachedPickup != null)
+        {
+            cachedPlayerTransform = cachedPickup.transform.root;
+            return cachedPlayerTransform;
+        }
 
         GameObject p = GameObject.FindGameObjectWithTag("Player");
-        if (p != null) return p.transform;
+        if (p != null)
+        {
+            cachedPlayerTransform = p.transform;
+            return cachedPlayerTransform;
+        }
 
         Camera cam = Camera.main;
-        if (cam != null) return cam.transform.root;
+        if (cam != null)
+        {
+            cachedPlayerTransform = cam.transform.root;
+            return cachedPlayerTransform;
+        }
 
         return transform;
     }

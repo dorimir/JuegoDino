@@ -1,10 +1,5 @@
 using UnityEngine;
 
-/// <summary>
-/// Componente que muestra un texto/indicador visual flotante sobre los objetos que se pueden recoger,
-/// indicando claramente qué tecla pulsar (por defecto [ E ]) y la acción/nombre del objeto.
-/// Se oculta automáticamente si el objeto ya está en manos del jugador o fuera del campo de visión.
-/// </summary>
 [DisallowMultipleComponent]
 public class PickupPrompt : MonoBehaviour
 {
@@ -58,27 +53,25 @@ public class PickupPrompt : MonoBehaviour
 
     private void FindPlayerReferences()
     {
+        if (playerCam != null) return;
+
+        playerCam = Camera.main;
         if (playerCam == null)
         {
-            playerCam = Camera.main;
-            if (playerCam == null)
+            Camera[] cams = Object.FindObjectsByType<Camera>(FindObjectsSortMode.None);
+            for (int i = 0; i < cams.Length; i++)
             {
-                Camera[] cams = Object.FindObjectsByType<Camera>(FindObjectsSortMode.None);
-                for (int i = 0; i < cams.Length; i++)
+                if (cams[i] != null && (cams[i].CompareTag("MainCamera") || cams[i].name.ToLower().Contains("firstperson") || cams[i].name.ToLower().Contains("player")))
                 {
-                    if (cams[i] != null && (cams[i].CompareTag("MainCamera") || cams[i].name.ToLower().Contains("firstperson") || cams[i].name.ToLower().Contains("player")))
-                    {
-                        playerCam = cams[i];
-                        break;
-                    }
+                    playerCam = cams[i];
+                    break;
                 }
             }
+        }
 
-            if (playerCam != null)
-            {
-                playerPickup = playerCam.GetComponent<PickUpScript>();
-                if (playerPickup == null) playerPickup = playerCam.GetComponentInParent<PickUpScript>();
-            }
+        if (playerCam != null)
+        {
+            playerPickup = playerCam.GetComponent<PickUpScript>() ?? playerCam.GetComponentInParent<PickUpScript>();
         }
     }
 
@@ -89,7 +82,6 @@ public class PickupPrompt : MonoBehaviour
         FindPlayerReferences();
         if (playerCam == null) return;
 
-        // No mostrar el indicador flotante si el jugador ya sostiene este objeto
         if (playerPickup != null && playerPickup.HeldObj == gameObject) return;
 
         Vector3 targetWorldPos = (cachedCollider != null)
@@ -104,7 +96,6 @@ public class PickupPrompt : MonoBehaviour
 
         int mask = ~((1 << 2) | (1 << 3));
 
-        // Si onlyWhenLookingAt es true, el cartel SOLO aparece cuando se mira directamente a la linterna/objeto
         if (onlyWhenLookingAt)
         {
             bool isLookingAt = false;
@@ -129,11 +120,9 @@ public class PickupPrompt : MonoBehaviour
         }
         else
         {
-            // Verificar que el objeto esté frente a la cámara
             if (Vector3.Dot(playerCam.transform.forward, toTarget.normalized) < 0.35f) return;
         }
 
-        // Comprobar si hay paredes bloqueando la línea de visión directa
         if (Physics.Linecast(camPos, targetWorldPos, out RaycastHit hit, mask, QueryTriggerInteraction.Ignore))
         {
             if (hit.transform != transform && !hit.transform.IsChildOf(transform) && !transform.IsChildOf(hit.transform))
@@ -152,7 +141,6 @@ public class PickupPrompt : MonoBehaviour
         float height = 34f;
         Rect rect = new Rect(screenPos.x - width * 0.5f, guiY - height * 0.5f, width, height);
 
-        // Fondo semitransparente oscuro
         Color oldColor = GUI.color;
         GUI.color = new Color(0.06f, 0.08f, 0.12f, 0.88f);
         GUI.DrawTexture(rect, bgTexture != null ? bgTexture : Texture2D.whiteTexture, ScaleMode.StretchToFill, true, 8f);

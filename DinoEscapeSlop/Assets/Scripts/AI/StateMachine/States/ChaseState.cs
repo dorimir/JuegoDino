@@ -6,6 +6,7 @@ public class ChaseState : IState, IPriorityState
     protected float repathTimer;
     protected const float RepathInterval = 0.25f;
     protected float lostSightTimer;
+    protected float chaseDurationTimer;
     protected Vector3 lastKnownTargetPos;
 
     /// <summary>
@@ -23,19 +24,16 @@ public class ChaseState : IState, IPriorityState
     {
         repathTimer = 0f;
         lostSightTimer = 0f;
+        chaseDurationTimer = 0f;
 
         ai.SetVisualState(EnemyAI.DinoVisualState.Chasing);
         if (ai.Movement != null)
         {
             ai.Movement.speed = ai.chaseSpeed;
+            if (ai.dinoEmboscador) ai.Movement.chaseTurnRate = ai.ambushTurnRate;
         }
 
-        if (ai.isPriorityChase)
-        {
-            ai.EnsurePlayerReference();
-            lastKnownTargetPos = (ai.Player != null) ? ai.Player.position : ai.transform.position;
-        }
-        else if (ai.TargetDino != null)
+        if (!ai.isPriorityChase && ai.TargetDino != null)
         {
             lastKnownTargetPos = ai.TargetDino.transform.position;
         }
@@ -48,10 +46,17 @@ public class ChaseState : IState, IPriorityState
 
     public virtual void Update()
     {
+        // Si aparece un depredador superior en el cono de visión, se cancela la persecución para huir
+        if (!ai.isPriorityChase && ai.CanSeeThreat(out EnemyAI threat))
+        {
+            if (ai.IsSmallDino) ai.NotifyPackFlee(threat);
+            else ai.TriggerFlee(threat);
+            return;
+        }
+
         if (!ai.isPriorityChase && ai.TargetDino != null)
         {
-            // Los dinosaurios ciegos no atacan a los pequeños
-            if (ai is BlindEnemyAI || (ai.TargetDino.IsSmallDino && ai is BlindEnemyAI))
+            if (ai is BlindEnemyAI || ai is AmbushEnemyAI || ai.dinoEmboscador)
             {
                 EndChase();
                 return;
@@ -75,7 +80,7 @@ public class ChaseState : IState, IPriorityState
             );
             float vDiff = Mathf.Abs(ai.transform.position.y - ai.TargetDino.transform.position.y);
 
-            if (distToTarget <= ai.AttackRange && vDiff < 2.0f)
+            if (distToTarget <= ai.AttackRange && vDiff < 2.5f)
             {
                 ai.TargetDino.Die();
                 EndChase();
@@ -120,6 +125,17 @@ public class ChaseState : IState, IPriorityState
         {
             ai.KillPlayer();
             return;
+        }
+
+        // Emboscador: duración de persecución máxima antes de volver a ocultarse
+        if (ai.dinoEmboscador)
+        {
+            chaseDurationTimer += Time.deltaTime;
+            if (chaseDurationTimer >= ai.ambushAttackDuration)
+            {
+                EndChase();
+                return;
+            }
         }
 
         bool playerVisible = ai.CanSeePlayer();
@@ -170,39 +186,39 @@ public class ChaseState : IState, IPriorityState
 
     public virtual void EndChase()
     {
-        if (ai != null)
-        {
-            ai.isPriorityChase = false;
-        }
+        if (ai == null) return;
 
-        if (ai != null && ai.TargetDino != null)
+        ai.isPriorityChase = false;
+        if (ai.TargetDino != null)
         {
             ai.preyCooldownTimer = ai.preyChaseCooldown;
             ai.TargetDino = null;
         }
 
-        if (ai != null)
+        if (ai.dinoEmboscador && ai.AmbushRecoverState != null)
         {
-            ai.TriggerPatrol();
+            ai.StateMachine.ChangeState(ai.AmbushRecoverState);
+            return;
         }
+
+        ai.TriggerPatrol();
     }
 
     public virtual void Exit()
     {
-        if (ai != null)
-        {
-            ai.isPriorityChase = false;
-        }
+        if (ai == null) return;
 
+        ai.isPriorityChase = false;
         ai.SetVisualState(EnemyAI.DinoVisualState.Normal);
         ai.TargetDino = null;
 
         if (ai.Movement != null)
         {
             ai.Movement.speed = ai.patrolSpeed;
+            ai.Movement.chaseTurnRate = 340f;
             ai.Movement.ClearPath();
             ai.Movement.ResetVelocity();
-            ai.Movement.GoToNearestPatrolNode();
+            if (!ai.dinoEmboscador) ai.Movement.GoToNearestPatrolNode();
         }
     }
 }

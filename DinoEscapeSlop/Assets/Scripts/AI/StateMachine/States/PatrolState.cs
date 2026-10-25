@@ -26,6 +26,21 @@ public class PatrolState : IState
     {
         if (CheckPerceptions()) return;
 
+        if (ai.isLeader && ai.packFollowers != null && ai.packFollowers.Count > 0 && ai.Movement != null)
+        {
+            float maxFollowerDist = 0f;
+            for (int i = 0; i < ai.packFollowers.Count; i++)
+            {
+                if (ai.packFollowers[i] != null && ai.packFollowers[i].gameObject.activeInHierarchy)
+                {
+                    float d = Vector3.Distance(ai.transform.position, ai.packFollowers[i].transform.position);
+                    if (d > maxFollowerDist) maxFollowerDist = d;
+                }
+            }
+
+            ai.Movement.speed = (maxFollowerDist > 4.5f) ? (ai.patrolSpeed * 0.45f) : ai.patrolSpeed;
+        }
+
         if (ai.Movement != null && ai.Movement.HasReachedDestination)
         {
             ai.Movement.GoToNextPatrolNode();
@@ -34,39 +49,37 @@ public class PatrolState : IState
 
     protected virtual bool CheckPerceptions()
     {
+        // 1. Detección de amenazas según jerarquía (Pequeño huye de Mediano y Grande; Mediano huye de Grande)
+        if (ai.CanSeeThreat(out EnemyAI threat))
+        {
+            if (ai.IsSmallDino) ai.NotifyPackFlee(threat);
+            else ai.TriggerFlee(threat);
+            return true;
+        }
+
+        // 2. Detección y caza del Jugador (los tres arquetipos cazan al jugador)
+        if (ai.CanSeePlayer())
+        {
+            if (ai.IsSmallDino) ai.NotifyPackAttack(ai.Player);
+            else ai.TriggerAttack(ai.Player);
+            return true;
+        }
+
+        // 3. Detección y caza de presas según jerarquía (Grande caza Mediano; Mediano caza Pequeño)
+        if (ai.preyCooldownTimer <= 0f && ai.CanSeeHuntablePrey(out EnemyAI huntablePrey))
+        {
+            ai.TriggerAttack(huntablePrey.transform, huntablePrey);
+            return true;
+        }
+
+        // 4. Lógica de manada para dinosaurios pequeños
         if (ai.IsSmallDino)
         {
-            if (ai.CanSeeBigDino(out EnemyAI bigDino) && !(bigDino is BlindEnemyAI))
-            {
-                ai.NotifyPackFlee(bigDino);
-                return true;
-            }
-
-            if (ai.CanSeePlayer())
-            {
-                ai.NotifyPackAttack(ai.Player);
-                return true;
-            }
-
             CheckMutualEncounters();
 
             if (ai.LeaderAI != null && ai.LeaderAI.gameObject.activeInHierarchy)
             {
                 ai.TriggerPatrol();
-                return true;
-            }
-        }
-        else
-        {
-            if (ai.CanSeePlayer())
-            {
-                ai.TriggerAttack(ai.Player);
-                return true;
-            }
-
-            if (ai.preyCooldownTimer <= 0f && ai.CanSeePrey(out EnemyAI smallDino))
-            {
-                ai.TriggerAttack(smallDino.transform, smallDino);
                 return true;
             }
         }
@@ -76,9 +89,9 @@ public class PatrolState : IState
 
     protected virtual void CheckMutualEncounters()
     {
-        for (int i = 0; i < EnemyAI.AllPrey.Count; i++)
+        for (int i = 0; i < EnemyAI.AllSmallDinos.Count; i++)
         {
-            EnemyAI other = EnemyAI.AllPrey[i];
+            EnemyAI other = EnemyAI.AllSmallDinos[i];
             if (other == null || other == ai || !other.gameObject.activeInHierarchy) continue;
 
             if (!ai.MutuallySees(other)) continue;
