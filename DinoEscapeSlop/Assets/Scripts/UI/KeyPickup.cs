@@ -3,13 +3,16 @@
 public class KeyPickup : MonoBehaviour
 {
     [Header("AnimaciÃ³n de Llave")]
-
+    [Tooltip("Velocidad de rotaciÃ³n continua sobre su propio eje en grados por segundo.")]
     public float rotationSpeed = 80f;
 
+    [Tooltip("Frecuencia del suave balanceo vertical.")]
     public float bobFrequency = 2.5f;
 
+    [Tooltip("Amplitud del balanceo vertical en metros.")]
     public float bobAmplitude = 0.12f;
 
+    [Tooltip("Radio de recogida por proximidad.")]
     public float pickupDistance = 2.0f;
 
     private Vector3 initialPos;

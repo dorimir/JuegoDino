@@ -1,11 +1,19 @@
 using UnityEngine;
 
+/// <summary>
+/// Inteligencia Artificial para el dinosaurio emboscador (DinoEmboscador).
+/// Permanece oculto en un punto de emboscada (AmbushPoint) esperando a que el jugador pase por delante.
+/// Al detectarlo, acecha brevemente y lanza una feroz persecución a gran velocidad.
+/// Si el jugador logra escapar perdiendo la línea de visión o distanciándose, el dinosaurio se recupera
+/// y regresa navegando al punto de emboscada para reiniciar su acecho.
+/// </summary>
 public class AmbushEnemyAI : EnemyAI
 {
     [Header("Configuración del Punto de Emboscada")]
-
+    [Tooltip("Punto de emboscada asignado donde se ocultará el dinosaurio.")]
     public AmbushPoint assignedAmbushPoint;
 
+    [Tooltip("Si está activo, al escapar el jugador el dinosaurio regresará al punto de emboscada más cercano en lugar de obligatoriamente al asignado.")]
     public bool returnToNearestAmbushPoint = false;
 
     protected override void DeterminePreyOrPredator()
@@ -145,17 +153,28 @@ public class AmbushEnemyAI : EnemyAI
         }
     }
 
+    /// <summary>
+    /// El dinosaurio emboscador no huye de la luz de la linterna.
+    /// Al ser iluminado directamente, descubre de inmediato al jugador e inicia el ataque.
+    /// </summary>
     public override void TriggerScaredByLight(Transform threatPlayer)
     {
         base.TriggerScaredByLight(threatPlayer);
     }
 
+    /// <summary>
+    /// El dinosaurio emboscador no busca ni persigue dinosaurios pequeños / presas.
+    /// Se enfoca exclusivamente en esperar y emboscar al jugador.
+    /// </summary>
     public override bool CanSeePrey(out EnemyAI spottedPrey)
     {
         spottedPrey = null;
         return false;
     }
 
+    /// <summary>
+    /// El dinosaurio emboscador solo ataca al jugador; ignora cualquier objetivo de dinosaurio pequeño.
+    /// </summary>
     public override void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
         if (targetDino != null && targetDino.IsSmallDino) return;
@@ -165,8 +184,11 @@ public class AmbushEnemyAI : EnemyAI
         base.TriggerAttack(target, null);
     }
 
+    /// <summary>
+    /// El dinosaurio emboscador ignora las llamadas de huida de otros dinosaurios.
+    /// </summary>
     public override void NotifyPackFlee(EnemyAI threat)
     {
-
+        // No responde a la huida de la manada
     }
 }

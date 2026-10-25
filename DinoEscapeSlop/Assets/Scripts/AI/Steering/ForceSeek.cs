@@ -58,6 +58,9 @@ public class ForcesSeek : MonoBehaviour
     }
 }
 
+/// <summary>
+/// Alias compatible con el nombre del archivo ForceSeek.cs.
+/// </summary>
 public class ForceSeek : ForcesSeek
 {
 }

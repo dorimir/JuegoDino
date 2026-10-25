@@ -1,6 +1,11 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Sistema de búsqueda de caminos A* sobre el grafo de nodos del mapa.
+/// Incluye atajos y optimización por raycast, prevención de obstáculos dinámicos
+/// y fallback al nodo más cercano alcanzable si el destino está bloqueado.
+/// </summary>
 public class AStarPathfinding : MonoBehaviour
 {
     private Node[] cachedNodes;
@@ -32,7 +37,8 @@ public class AStarPathfinding : MonoBehaviour
 
     public List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos, float clearanceRadius = 0.35f)
     {
-
+        // 1. Raycast directo al destino: si el objetivo es directamente alcanzable desde startPos,
+        // no hace falta pasar por ningún intermediario.
         if (HasClearLine(startPos, targetPos, clearanceRadius))
         {
             return new List<Vector3> { targetPos };
@@ -43,12 +49,13 @@ public class AStarPathfinding : MonoBehaviour
 
         if (startNode == null || targetNode == null) return null;
 
+        // 2. Si el nodo objetivo ya es directamente alcanzable por raycast desde startPos:
         if (HasClearLine(startPos, targetNode.transform.position, clearanceRadius))
         {
             List<Vector3> directToTargetNode = new List<Vector3>();
-            float dStartToTargetNodeSqr = (startPos.x - targetNode.transform.position.x) * (startPos.x - targetNode.transform.position.x) +
+            float dStartToTargetNodeSqr = (startPos.x - targetNode.transform.position.x) * (startPos.x - targetNode.transform.position.x) + 
                                           (startPos.z - targetNode.transform.position.z) * (startPos.z - targetNode.transform.position.z);
-            float dTargetNodeToFinalSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) +
+            float dTargetNodeToFinalSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) + 
                                           (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
 
             if (dStartToTargetNodeSqr > 0.36f) directToTargetNode.Add(targetNode.transform.position);
@@ -60,9 +67,9 @@ public class AStarPathfinding : MonoBehaviour
         if (startNode == targetNode)
         {
             List<Vector3> directPath = new List<Vector3>();
-            float dStartSqr = (startPos.x - targetNode.transform.position.x) * (startPos.x - targetNode.transform.position.x) +
+            float dStartSqr = (startPos.x - targetNode.transform.position.x) * (startPos.x - targetNode.transform.position.x) + 
                               (startPos.z - targetNode.transform.position.z) * (startPos.z - targetNode.transform.position.z);
-            float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) +
+            float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) + 
                                (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
 
             if (dStartSqr > 0.36f) directPath.Add(targetNode.transform.position);
@@ -71,6 +78,7 @@ public class AStarPathfinding : MonoBehaviour
             return directPath;
         }
 
+        // Navegación A* a través de las conexiones de cada nodo (currentNode.neighbors)
         List<Node> openSet = new List<Node> { startNode };
         HashSet<Node> closedSet = new HashSet<Node>();
 
@@ -110,13 +118,14 @@ public class AStarPathfinding : MonoBehaviour
             if (currentNode == targetNode)
             {
                 List<Vector3> rawPath = RetracePath(startNode, targetNode, parentMap);
-                float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) +
+                float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) + 
                                    (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
                 if (rawPath != null && dTargetSqr > 0.36f)
                 {
                     rawPath.Add(targetPos);
                 }
 
+                // Optimización y atajo por raycast: se omiten nodos intermediarios si se puede ver un nodo posterior directamente
                 return OptimizePathWithRaycast(rawPath, startPos, clearanceRadius);
             }
 
@@ -142,6 +151,8 @@ public class AStarPathfinding : MonoBehaviour
             }
         }
 
+        // Fallback robusto: si el destino final está desconectado o no se alcanza,
+        // devolver la mejor ruta hasta el nodo más cercano alcanzable hacia el objetivo
         if (closestToTarget != null && closestToTarget != startNode)
         {
             List<Vector3> partialPath = RetracePath(startNode, closestToTarget, parentMap);
@@ -151,6 +162,10 @@ public class AStarPathfinding : MonoBehaviour
         return null;
     }
 
+    /// <summary>
+    /// Suavizado y atajo de ruta por raycast: si desde un punto se alcanza en línea recta un nodo posterior,
+    /// se omiten todos los nodos intermediarios intermedios.
+    /// </summary>
     public static List<Vector3> OptimizePathWithRaycast(List<Vector3> rawPath, Vector3 startPos, float clearanceRadius = 0.35f)
     {
         if (rawPath == null || rawPath.Count <= 1) return rawPath;
@@ -237,6 +252,10 @@ public class AStarPathfinding : MonoBehaviour
         return cachedNodes;
     }
 
+    /// <summary>
+    /// Determina si un colisionador constituye un obstáculo sólido para la navegación.
+    /// Ignora triggers, dinosaurios, jugador, llaves, objetos recogibles y suelos transitables.
+    /// </summary>
     public static bool IsNavObstacle(Collider col)
     {
         if (col == null || col.isTrigger) return false;
@@ -349,6 +368,7 @@ public class AStarPathfinding : MonoBehaviour
             }
         }
 
+        // Si ya estamos prácticamente sobre un nodo (ej. posición de spawn), ese es el nodo exacto
         if (closestFallback != null && minFallbackDistSqr <= 1.0f)
         {
             return closestFallback;

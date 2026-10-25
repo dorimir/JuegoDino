@@ -8,13 +8,13 @@ public class Linterna : MonoBehaviour
     [Header("Cono de Luz")]
     public float alcance = 12f;
     [Range(5f, 120f)] public float anguloCono = 45f;
-
+    [Tooltip("Punto desde el que sale la luz. Si está vacío usa el propio objeto.")]
     public Transform origen;
 
     [Header("Posición en la Mano")]
-
+    [Tooltip("Offset relativo a la cámara cuando está sostenida en mano (primera persona).")]
     public Vector3 offsetEnMano = new Vector3(0.28f, -0.22f, 0.52f);
-
+    [Tooltip("Inclinación extra respecto a mirar recto.")]
     public Vector3 inclinacionEnMano = new Vector3(0f, -2f, 0f);
 
     [Header("Control")]
@@ -268,7 +268,7 @@ public class Linterna : MonoBehaviour
         if (dist <= 22f * multiplier)
         {
             soundPos = PosicionUltimoImpacto;
-            intensity = 2.0f;
+            intensity = 2.0f; // Prioridad alta, superior al ruido de pasos
             soundSource = TransformLinterna;
             return true;
         }
@@ -288,7 +288,7 @@ public class Linterna : MonoBehaviour
         {
             EnemyAI dino = EnemyAI.AllEnemies[i];
             if (dino == null || !dino.gameObject.activeInHierarchy) continue;
-            if (dino is BlindEnemyAI || dino.dinoCiego) continue;
+            if (dino is BlindEnemyAI || dino.dinoCiego) continue; // El dinosaurio ciego no ve la luz y no entra en huida
 
             Vector3 dinoEye = dino.transform.position + Vector3.up * dino.eyeHeight;
             Vector3 dinoCenter = dino.transform.position + Vector3.up * Mathf.Max(0.25f, dino.eyeHeight * 0.5f);
@@ -300,6 +300,7 @@ public class Linterna : MonoBehaviour
             float angleFromBeam = Vector3.Angle(originFwd, toDino.normalized);
             if (angleFromBeam > anguloCono * 0.5f) continue;
 
+            // Comprobar visión directa hacia el dinosaurio (evitar oclusión por muros)
             bool occluded = true;
             if (!Physics.Linecast(originPos, dinoEye, out RaycastHit hit, wallMask, QueryTriggerInteraction.Ignore))
             {
@@ -322,6 +323,7 @@ public class Linterna : MonoBehaviour
 
             lastIlluminatedTimes[dino] = Time.time;
 
+            // Todos los dinosaurios excepto el ciego entran en estado de huida si les da con la linterna
             if (dino.StateMachine != null && dino.StateMachine.CurrentState != dino.FleeState)
             {
                 Transform pTransform = GetPlayerTransform();

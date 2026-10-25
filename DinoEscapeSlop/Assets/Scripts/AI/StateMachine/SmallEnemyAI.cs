@@ -1,6 +1,10 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Inteligencia Artificial específica para los dinosaurios pequeños (presas/velociraptores).
+/// Maneja comportamiento de manada, amplio campo de visión y estados de patrulla, persecución y huida.
+/// </summary>
 public class SmallEnemyAI : EnemyAI
 {
     [Header("Referencias de Estados de Presa / Dinosaurio Pequeño")]

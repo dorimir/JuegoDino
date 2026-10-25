@@ -39,6 +39,7 @@ public class FollowLeaderState : IState
             return;
         }
 
+        // Percepciones en formación
         if (ai.CanSeeThreat(out EnemyAI threat))
         {
             if (ai.IsSmallDino) ai.NotifyPackFlee(threat);
@@ -61,6 +62,7 @@ public class FollowLeaderState : IState
 
         if (ai.Movement == null) return;
 
+        // 1. Obtener puesto único en la manada
         int slotIndex = leader.packFollowers.IndexOf(ai);
         if (slotIndex < 0)
         {
@@ -68,6 +70,7 @@ public class FollowLeaderState : IState
             slotIndex = leader.packFollowers.IndexOf(ai);
         }
 
+        // 2. Geometría de Formación en Pirámide (Delta / Wedge / Pirámide)
         int row = (slotIndex / 2) + 1;
         float side = (slotIndex % 2 == 0) ? -1f : 1f;
 
@@ -84,6 +87,7 @@ public class FollowLeaderState : IState
         Vector3 leaderFwd = leader.transform.forward;
         Vector3 leaderRight = leader.transform.right;
 
+        // Si hay una pared inmediatamente detrás del líder, acortar el retroceso
         if (Physics.Raycast(leaderPos + Vector3.up * rayHeight, -leaderFwd, out RaycastHit spineWallHit, backDist + bodyRadius + 0.15f, ObstacleMask, QueryTriggerInteraction.Ignore))
         {
             if (IsValidFormationObstacle(spineWallHit))
@@ -95,6 +99,7 @@ public class FollowLeaderState : IState
         Vector3 spinePos = leaderPos - (leaderFwd * backDist);
         spinePos.y = ai.transform.position.y;
 
+        // Adaptación dinámica al ancho de pasillos y muros:
         Vector3 sideDir = leaderRight * side;
         if (Physics.Raycast(spinePos + Vector3.up * rayHeight, sideDir, out RaycastHit wallHit, desiredLateral + bodyRadius + 0.20f, ObstacleMask, QueryTriggerInteraction.Ignore))
         {
@@ -108,6 +113,7 @@ public class FollowLeaderState : IState
         Vector3 idealSlotPos = spinePos + (leaderRight * lateralDist);
         idealSlotPos.y = ai.transform.position.y;
 
+        // Separación garantizada de muros para el slot de formación
         Collider[] slotWalls = Physics.OverlapSphere(idealSlotPos + Vector3.up * rayHeight, bodyRadius + 0.15f, ObstacleMask, QueryTriggerInteraction.Ignore);
         for (int i = 0; i < slotWalls.Length; i++)
         {
@@ -129,6 +135,7 @@ public class FollowLeaderState : IState
 
         float safeClearance = bodyRadius * 0.75f;
 
+        // Si la posición de cuña no tiene línea de visión despejada, alinearse en la columna central o seguir al líder
         if (!ai.Movement.HasClearLineTo(idealSlotPos, safeClearance))
         {
             if (ai.Movement.HasClearLineTo(spinePos, safeClearance))
@@ -141,6 +148,7 @@ public class FollowLeaderState : IState
             }
         }
 
+        // 3. Suavizado cinemático continuo (SmoothDamp)
         if (!isSlotInitialized)
         {
             currentSmoothedSlotPos = idealSlotPos;
@@ -158,6 +166,7 @@ public class FollowLeaderState : IState
         float leaderCurrentSpeed = leaderVel.magnitude;
         float leaderTargetSpeed = (leader.Movement != null) ? leader.Movement.speed : ai.patrolSpeed;
 
+        // 4. Modulación continua y suave de velocidad
         float targetSpeed;
         if (leaderCurrentSpeed < 0.08f && distToSlot <= 0.40f)
         {
@@ -172,12 +181,14 @@ public class FollowLeaderState : IState
 
         ai.Movement.speed = Mathf.MoveTowards(ai.Movement.speed, targetSpeed, 12f * Time.deltaTime);
 
+        // 5. Orientación suave en formación
         if (distToSlot <= 0.55f && leader.Movement != null)
         {
             Quaternion targetRot = Quaternion.Euler(0f, leader.transform.eulerAngles.y, 0f);
             ai.transform.rotation = Quaternion.Slerp(ai.transform.rotation, targetRot, 8f * Time.deltaTime);
         }
 
+        // 6. Desplazamiento hacia el puesto suavizado de la pirámide
         if (ai.Movement.HasClearLineTo(currentSmoothedSlotPos, safeClearance))
         {
             ai.Movement.MoveTo(currentSmoothedSlotPos);

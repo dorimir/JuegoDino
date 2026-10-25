@@ -11,7 +11,7 @@ public class RuidoJugador : MonoBehaviour
     public float radioSalto = 8f;
 
     [Header("Detección")]
-
+    [Tooltip("Velocidad horizontal mínima para considerar que camina.")]
     public float velocidadMinima = 0.3f;
 
     public bool Sonando { get; private set; }

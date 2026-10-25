@@ -8,7 +8,7 @@ public class PreyFollowLeaderState : FollowLeaderState
 
     public override void Update()
     {
-
+        // El dinosaurio pequeño seguidor huye ante amenazas (dinosaurio mediano o grande)
         if (ai.CanSeeThreat(out EnemyAI threat))
         {
             ai.NotifyPackFlee(threat);

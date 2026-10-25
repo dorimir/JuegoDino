@@ -22,11 +22,11 @@ public class EnemyMovement : MonoBehaviour
     public float waypointRadius = 0.75f;
 
     [Header("Ajuste a Ras de Suelo")]
-
+    [Tooltip("Distancia hacia abajo para buscar la superficie del suelo.")]
     public float groundCheckDistance = 10.0f;
-
+    [Tooltip("Ajuste fino de altura sobre el suelo.")]
     public float groundOffset = 0.0f;
-
+    [Tooltip("Velocidad de ajuste vertical para adaptarse a pendientes y desniveles.")]
     public float groundSnapSpeed = 25.0f;
 
     [Header("Nodos de Patrulla")]
@@ -255,6 +255,8 @@ public class EnemyMovement : MonoBehaviour
         bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
         float clearance = isSmall ? 0.20f : (isBig ? 0.50f : 0.35f);
 
+        // ComprobaciÃ³n de raycast para saber si el objetivo es directamente alcanzable desde la posiciÃ³n actual:
+        // Si el objetivo es alcanzable ya, no hace falta que pase por ningÃºn intermediario.
         if (HasClearLineTo(targetPosition, clearance))
         {
             currentPath = null;
@@ -274,7 +276,7 @@ public class EnemyMovement : MonoBehaviour
         if (pathfinding != null)
         {
             CancelInvoke();
-
+            // NavegaciÃ³n mediante las conexiones (neighbors) de los nodos con optimizaciÃ³n de raycast
             currentPath = pathfinding.FindPath(transform.position, targetPosition, clearance);
 
             if (currentPath != null && currentPath.Count > 0)
@@ -359,13 +361,16 @@ public class EnemyMovement : MonoBehaviour
         bool isBig = (ai != null) ? ai.IsBigDino : (Mathf.Max(transform.lossyScale.x, transform.lossyScale.y, transform.lossyScale.z) >= 2.5f);
         float clearance = isSmall ? 0.20f : (isBig ? 0.50f : 0.35f);
 
+        // ComprobaciÃ³n de raycast continua: si el objetivo final ya es directamente alcanzable desde la posiciÃ³n actual,
+        // no hace falta que pase por ningÃºn intermediario restante; vamos directamente al objetivo.
         if (hasDirectTarget && HasClearLineTo(directTargetPosition, clearance))
         {
             currentPath = null;
         }
         else if (currentPath != null && currentPath.Count > 0 && targetIndex < currentPath.Count)
         {
-
+            // Atajo dinÃ¡mico por raycast: comprobamos desde el Ãºltimo nodo hacia adelante si ya es visible.
+            // Si cualquier nodo mÃ¡s lejano del camino es alcanzable directamente, saltamos todos los intermediarios.
             for (int i = currentPath.Count - 1; i > targetIndex; i--)
             {
                 if (HasClearLineTo(currentPath[i], clearance))
@@ -446,7 +451,7 @@ public class EnemyMovement : MonoBehaviour
                 else
                 {
                     hasDirectTarget = false;
-
+                    // Encadenamiento continuo de patrulla para evitar detenerse en cada nodo
                     GoToNextPatrolNode();
 
                     if (currentPath != null && currentPath.Count > 0 && targetIndex < currentPath.Count)
@@ -504,11 +509,13 @@ public class EnemyMovement : MonoBehaviour
             stuckTimer = 0f;
         }
 
+        // CorrecciÃ³n predictiva de trayectoria contra muros, marcos y esquinas
         desiredDirection = ApplyWhiskerAvoidance(desiredDirection, isSmall, out float wallAvoidanceUrgency);
 
         float turnAngle = Vector3.Angle(transform.forward, desiredDirection);
         float speedMultiplier = (!isChasing && turnAngle > 45f) ? Mathf.Lerp(0.7f, 1.0f, Mathf.Cos(turnAngle * Mathf.Deg2Rad)) : 1.0f;
 
+        // ModulaciÃ³n suave de velocidad si se aproxima a un muro u obstÃ¡culo para garantizar un giro limpio sin impacto
         if (wallAvoidanceUrgency > 0.15f)
         {
             speedMultiplier *= Mathf.Lerp(1.0f, 0.45f, (wallAvoidanceUrgency - 0.15f) / 0.85f);
@@ -517,7 +524,7 @@ public class EnemyMovement : MonoBehaviour
         float targetSpeed = speed * speedMultiplier;
 
         float currentTurnRate = (isChasing || isFleeing) ? chaseTurnRate : patrolTurnRate;
-
+        // Dinamismo de giro aumentado ante proximidad de muros para librar esquinas con rapidez y fluidez
         float effectiveTurnRate = Mathf.Lerp(currentTurnRate, Mathf.Max(currentTurnRate, 340f), wallAvoidanceUrgency);
 
         if (desiredDirection.sqrMagnitude > 0.001f)
@@ -768,6 +775,10 @@ public class EnemyMovement : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// Posiciona al dinosaurio exactamente sobre el nodo de navegaciÃ³n del mapa correspondiente a su spawn.
+    /// Establece transform.position en el transform.position exacto del nodo.
+    /// </summary>
     public void SnapToNode()
     {
         if (ai == null) ai = GetComponent<EnemyAI>();
@@ -778,7 +789,7 @@ public class EnemyMovement : MonoBehaviour
 
         if (spawnNode != null)
         {
-
+            // Spawn exactamente en el transform.position del nodo del mapa
             transform.position = spawnNode.transform.position;
             SpawnPosition = spawnNode.transform.position;
 
@@ -797,6 +808,11 @@ public class EnemyMovement : MonoBehaviour
         }
     }
 
+    /// <summary>
+    /// DesviaciÃ³n predictiva multi-sonda contra muros, esquinas y marcos de puertas.
+    /// Detecta obstÃ¡culos con antelaciÃ³n proporcional a la velocidad y corrige suavemente
+    /// la trayectoria siguiendo las normales de superficie y tangentes de despeje.
+    /// </summary>
     public Vector3 ApplyWhiskerAvoidance(Vector3 desiredDir, bool isSmall)
     {
         return ApplyWhiskerAvoidance(desiredDir, isSmall, out _);
@@ -812,6 +828,7 @@ public class EnemyMovement : MonoBehaviour
         float rayHeight = isSmall ? 0.45f : (isBig ? 1.45f : 0.85f);
         Vector3 origin = transform.position + Vector3.up * rayHeight;
 
+        // Distancia predictiva dinÃ¡mica: mayor velocidad implica mayor anticipaciÃ³n
         float curSpeed = Mathf.Max(speed, currentVelocity.magnitude);
         float baseLookahead = isSmall ? 1.35f : (isBig ? 2.65f : 1.95f);
         float forwardLookahead = Mathf.Clamp(baseLookahead + (curSpeed * 0.38f), 1.35f, 4.5f);
@@ -820,6 +837,7 @@ public class EnemyMovement : MonoBehaviour
         Vector3 forward = transform.forward;
         Vector3 right = transform.right;
 
+        // DirecciÃ³n de avance combinada entre orientaciÃ³n fÃ­sica y rumbo deseado
         Vector3 refHeading = (forward * 0.6f + desiredDir.normalized * 0.4f).normalized;
         if (refHeading.sqrMagnitude < 0.001f) refHeading = forward;
         Vector3 refRight = Vector3.Cross(Vector3.up, refHeading).normalized;
@@ -827,6 +845,7 @@ public class EnemyMovement : MonoBehaviour
         Vector3 avoidanceForce = Vector3.zero;
         float maxUrgency = 0f;
 
+        // 1. Sonda central frontal (SphereCast con radio corporal para anticipar muros perpendiculares y esquinas)
         float frontalSphereRadius = bodyRadius * 0.55f;
         if (Physics.SphereCast(origin, frontalSphereRadius, refHeading, out RaycastHit centerHit, forwardLookahead, wallLayerMask, QueryTriggerInteraction.Ignore))
         {
@@ -834,16 +853,18 @@ public class EnemyMovement : MonoBehaviour
             {
                 float hitDist = Mathf.Max(0.02f, centerHit.distance);
                 float urgency = 1.0f - Mathf.Clamp01(hitDist / forwardLookahead);
-
+                // ProgresiÃ³n exponencial suave para no dar tirones lejanos pero responder enÃ©rgicamente cerca
                 float weight = urgency * urgency;
                 maxUrgency = Mathf.Max(maxUrgency, urgency);
 
                 Vector3 wallNormal = new Vector3(centerHit.normal.x, 0f, centerHit.normal.z).normalized;
                 if (wallNormal.sqrMagnitude < 0.001f) wallNormal = -refHeading;
 
+                // Tangentes al muro en el plano XZ
                 Vector3 tangentA = Vector3.Cross(Vector3.up, wallNormal).normalized;
                 Vector3 tangentB = -tangentA;
 
+                // Elegir la tangente que favorezca la direcciÃ³n deseada o el flanco con giro mÃ¡s natural
                 Vector3 chosenTangent;
                 float dotA = Vector3.Dot(desiredDir, tangentA);
                 float dotB = Vector3.Dot(desiredDir, tangentB);
@@ -854,15 +875,19 @@ public class EnemyMovement : MonoBehaviour
                 }
                 else
                 {
-
+                    // Ante un muro completamente perpendicular y simÃ©trico, desviar hacia el lado al que ya apunta refRight
                     chosenTangent = (Vector3.Dot(tangentA, refRight) > 0f) ? tangentA : tangentB;
                 }
 
+                // Vector de desviaciÃ³n frontal: empuja a lo largo del muro (tangente) y alejÃ¡ndose de la superficie (normal)
                 Vector3 steerDir = (chosenTangent * 1.15f + wallNormal * 0.85f).normalized;
                 avoidanceForce += steerDir * (weight * 2.4f);
             }
         }
 
+        // 2. Sondas angulares predictivas (Whiskers):
+        // Diagonales frontales (Â±26Â°) para anticipar esquinas en giro y marcos de puertas
+        // Flancos amplios (Â±55Â°) para evitar raspar muros laterales en curvas cerradas
         float[] probeAngles = new float[] { -26f, 26f, -55f, 55f };
         float[] probeLengths = new float[] {
             forwardLookahead * 0.90f,
@@ -898,6 +923,7 @@ public class EnemyMovement : MonoBehaviour
                     Vector3 wallNormal = new Vector3(hit.normal.x, 0f, hit.normal.z).normalized;
                     if (wallNormal.sqrMagnitude < 0.001f) wallNormal = (angle < 0f) ? refRight : -refRight;
 
+                    // DesvÃ­o lejos de la pared: componente normal mÃ¡s componente de desvÃ­o lateral opuesto
                     Vector3 lateralPush = (angle < 0f) ? refRight : -refRight;
                     Vector3 probeSteer = (wallNormal * 0.75f + lateralPush * 0.55f).normalized;
                     avoidanceForce += probeSteer * weight;
@@ -905,6 +931,8 @@ public class EnemyMovement : MonoBehaviour
             }
         }
 
+        // Si una sonda detectÃ³ obstÃ¡culo cercano en un lado y el otro lado estÃ¡ mÃ¡s despejado,
+        // reforzar la correcciÃ³n hacia el lado abierto
         if (leftMinDist < float.MaxValue || rightMinDist < float.MaxValue)
         {
             if (leftMinDist < rightMinDist)
@@ -921,9 +949,10 @@ public class EnemyMovement : MonoBehaviour
 
         wallAvoidanceUrgency = maxUrgency;
 
+        // 3. Mezclado cinemÃ¡tico suave con la direcciÃ³n deseada
         if (avoidanceForce.sqrMagnitude > 0.001f)
         {
-
+            // El factor de mezcla aumenta progresivamente con la urgencia
             float blendWeight = Mathf.Clamp01(maxUrgency * 1.5f);
             Vector3 corrected = Vector3.Lerp(desiredDir.normalized, avoidanceForce.normalized, blendWeight);
             corrected.y = 0f;
@@ -975,6 +1004,7 @@ public class EnemyMovement : MonoBehaviour
             if (hit.collider.CompareTag("Player") || hit.collider.GetComponentInParent<FirstPersonMovement>() != null) continue;
             if (hit.collider.CompareTag("canPickUp")) continue;
 
+            // Superficie de suelo transitable
             if (hit.normal.y >= 0.35f)
             {
                 if (hit.point.y <= rayStart.y + 0.1f && hit.point.y > highestGroundY)

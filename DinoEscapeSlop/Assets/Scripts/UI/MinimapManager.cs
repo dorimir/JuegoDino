@@ -2,28 +2,43 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+/// <summary>
+/// Sistema de Cámara Top-Down y Minimapa Táctico en tiempo real.
+/// Se muestra en la esquina superior izquierda de la pantalla durante la partida.
+/// Renderiza la geometría del mapa y superpone indicadores visuales de:
+/// - El jugador (posición, orientación y linterna).
+/// - Todos los dinosaurios con su arquetipo, orientación, campo de visión y estado de IA en tiempo real.
+/// - Cambios dinámicos de estado con efecto de pulso/alerta visual en el radar.
+/// - Llaves del mapa, objeto sonoro y puerta de salida.
+/// </summary>
 public class MinimapManager : MonoBehaviour
 {
     public static MinimapManager Instance { get; private set; }
 
     [Header("Posición y Dimensiones")]
-
+    [Tooltip("Margen en píxeles desde la esquina superior izquierda.")]
     public float margin = 16f;
 
+    [Tooltip("Tamaño cuadrado del minimapa en pantalla (píxeles).")]
     public float mapSize = 250f;
 
     [Header("Configuración de Zoom y Modos")]
-
+    [Tooltip("Tamaño ortográfico para el modo de seguimiento táctico al jugador.")]
     public float tacticalZoomSize = 34f;
 
+    [Tooltip("Tamaño ortográfico para la vista global de todo el mapa.")]
     public float globalOverviewSize = 85f;
 
+    [Tooltip("Altura cenital de la cámara top-down.")]
     public float cameraHeight = 65f;
 
+    [Tooltip("Tecla para alternar entre Vista Táctica (Zoom) y Mapa Completo.")]
     public KeyCode toggleModeKey = KeyCode.M;
 
+    [Tooltip("Tecla para aumentar el zoom táctico.")]
     public KeyCode zoomInKey = KeyCode.Equals;
 
+    [Tooltip("Tecla para reducir el zoom táctico.")]
     public KeyCode zoomOutKey = KeyCode.Minus;
 
     [Header("Elementos Visuales")]
@@ -35,14 +50,14 @@ public class MinimapManager : MonoBehaviour
     public bool showStatusSummary = true;
 
     [Header("Colores de Estados de Dinosaurios")]
-    public Color patrolColor = new Color(0.2f, 0.9f, 0.35f, 1f);
-    public Color packColor = new Color(0.2f, 0.85f, 0.8f, 1f);
-    public Color alertColor = new Color(1f, 0.85f, 0.1f, 1f);
-    public Color stalkColor = new Color(1f, 0.55f, 0.05f, 1f);
-    public Color chaseColor = new Color(1f, 0.15f, 0.15f, 1f);
-    public Color alarmColor = new Color(1f, 0.1f, 0.85f, 1f);
-    public Color fleeColor = new Color(0.25f, 0.65f, 1f, 1f);
-    public Color hiddenColor = new Color(0.7f, 0.35f, 0.95f, 1f);
+    public Color patrolColor = new Color(0.2f, 0.9f, 0.35f, 1f);     // Verde
+    public Color packColor = new Color(0.2f, 0.85f, 0.8f, 1f);       // Cyan / Menta
+    public Color alertColor = new Color(1f, 0.85f, 0.1f, 1f);        // Amarillo
+    public Color stalkColor = new Color(1f, 0.55f, 0.05f, 1f);       // Naranja
+    public Color chaseColor = new Color(1f, 0.15f, 0.15f, 1f);       // Rojo
+    public Color alarmColor = new Color(1f, 0.1f, 0.85f, 1f);        // Magenta
+    public Color fleeColor = new Color(0.25f, 0.65f, 1f, 1f);        // Azul
+    public Color hiddenColor = new Color(0.7f, 0.35f, 0.95f, 1f);     // Púrpura
 
     public enum DinoStateCategory
     {
@@ -193,6 +208,7 @@ public class MinimapManager : MonoBehaviour
         minimapCamera.nearClipPlane = 0.5f;
         minimapCamera.farClipPlane = 150f;
 
+        // Excluir capa de UI (5) y holdLayer (6) para que las manos/armas no tapen la cámara
         minimapCamera.cullingMask = ~((1 << 5) | (1 << 6));
         minimapCamera.depth = -10;
 
@@ -232,11 +248,13 @@ public class MinimapManager : MonoBehaviour
             FindPlayer();
         }
 
+        // Alternar modo con tecla M
         if (Input.GetKeyDown(toggleModeKey))
         {
             isTacticalZoom = !isTacticalZoom;
         }
 
+        // Ajuste fino de zoom táctico
         if (isTacticalZoom)
         {
             if (Input.GetKey(zoomInKey) || Input.GetKey(KeyCode.KeypadPlus))
@@ -379,18 +397,22 @@ public class MinimapManager : MonoBehaviour
         float topMargin = margin;
         float leftMargin = margin;
 
+        // 1. Cabecera del Minimapa
         Rect headerRect = new Rect(leftMargin, topMargin, mapSize, 24f);
         DrawHeader(headerRect);
 
+        // 2. Rectángulo de la textura del mapa
         Rect mapRect = new Rect(leftMargin, topMargin + 26f, mapSize, mapSize);
         DrawMinimapViewport(mapRect);
 
+        // 3. Superposición de elementos interactivos
         DrawExitDoor(mapRect);
         DrawKeys(mapRect);
         DrawSoundObject(mapRect);
         DrawDinosaurs(mapRect);
         DrawPlayerMarker(mapRect);
 
+        // 4. Barra de resumen inferior con conteo de dinosaurios por estado
         if (showStatusSummary)
         {
             Rect footerRect = new Rect(leftMargin, mapRect.yMax + 4f, mapSize, 36f);
@@ -417,19 +439,22 @@ public class MinimapManager : MonoBehaviour
 
     private void DrawMinimapViewport(Rect mapRect)
     {
-
+        // Fondo exterior
         GUI.color = new Color(0.02f, 0.03f, 0.05f, 1f);
         GUI.DrawTexture(new Rect(mapRect.x - 2f, mapRect.y - 2f, mapRect.width + 4f, mapRect.height + 4f), darkBgTexture);
 
+        // Render Texture de la cámara Top-Down
         if (minimapTexture != null)
         {
             GUI.color = Color.white;
             GUI.DrawTexture(mapRect, minimapTexture, ScaleMode.StretchToFill);
         }
 
+        // Borde estilizado
         GUI.color = new Color(0.15f, 0.65f, 0.95f, 0.65f);
         GUI.DrawTexture(mapRect, borderTexture);
 
+        // Retícula central tenue
         GUI.color = new Color(1f, 1f, 1f, 0.06f);
         float midX = mapRect.x + mapRect.width * 0.5f;
         float midY = mapRect.y + mapRect.height * 0.5f;
@@ -448,6 +473,7 @@ public class MinimapManager : MonoBehaviour
         float px = mapRect.x + vp.x * mapRect.width;
         float py = mapRect.y + (1f - vp.y) * mapRect.height;
 
+        // Comprobar si cae dentro del área visible del minimapa
         if (px >= mapRect.x - 6f && px <= mapRect.xMax + 6f && py >= mapRect.y - 6f && py <= mapRect.yMax + 6f)
         {
             return new Vector2(px, py);
@@ -544,11 +570,12 @@ public class MinimapManager : MonoBehaviour
 
             float forwardAngle = enemy.transform.eulerAngles.y;
 
+            // 1. Cono de visión o campo de audición
             if (showVisionCones)
             {
                 if (enemy is BlindEnemyAI blind)
                 {
-
+                    // Radio de audición
                     float hearingRadiusPx = blind.walkNoiseRadius * pixelsPerWorldUnit * 0.65f;
                     DrawHollowRing(screenPos, hearingRadiusPx, new Color(stateColor.r, stateColor.g, stateColor.b, 0.22f));
                 }
@@ -560,6 +587,7 @@ public class MinimapManager : MonoBehaviour
                 }
             }
 
+            // 2. Efecto de pulso ante cambio reciente de estado
             if (stateChangeTimes.TryGetValue(enemy, out float changeTime))
             {
                 float timeSinceChange = now - changeTime;
@@ -572,15 +600,19 @@ public class MinimapManager : MonoBehaviour
                 }
             }
 
+            // 3. Marcador del dinosaurio
             float markerSize = enemy.IsSmallDino ? 11f : (enemy.IsBigDino ? 21f : 15f);
             Rect markerRect = new Rect(screenPos.x - markerSize * 0.5f, screenPos.y - markerSize * 0.5f, markerSize, markerSize);
 
+            // Borde oscuro del marcador
             GUI.color = new Color(0.05f, 0.05f, 0.08f, 0.95f);
             GUI.DrawTexture(new Rect(markerRect.x - 1.5f, markerRect.y - 1.5f, markerRect.width + 3f, markerRect.height + 3f), circleTexture);
 
+            // Círculo coloreado del estado
             GUI.color = stateColor;
             GUI.DrawTexture(markerRect, circleTexture);
 
+            // Flecha indicadora de dirección
             Matrix4x4 oldMat = GUI.matrix;
             GUIUtility.RotateAroundPivot(forwardAngle, screenPos);
             GUI.color = Color.white;
@@ -588,6 +620,7 @@ public class MinimapManager : MonoBehaviour
             GUI.DrawTexture(new Rect(screenPos.x - arrowSize * 0.5f, screenPos.y - arrowSize * 0.6f, arrowSize, arrowSize), arrowTexture);
             GUI.matrix = oldMat;
 
+            // 4. Etiqueta con el arquetipo y estado
             if (showStateLabels)
             {
                 string labelText = $"{archetype}\n<color=#{ColorUtility.ToHtmlStringRGB(stateColor)}>[{stateName}]</color>";
@@ -608,18 +641,22 @@ public class MinimapManager : MonoBehaviour
         Vector2 pt = pos.Value;
         float markerSize = 16f;
 
+        // Cono de la linterna si está encendida
         if (Linterna.Encendidas != null && Linterna.Encendidas.Count > 0)
         {
             float camAngle = Camera.main != null ? Camera.main.transform.eulerAngles.y : playerTransform.eulerAngles.y;
             DrawVisionArc(pt, camAngle, 55f, 42f, new Color(1f, 0.95f, 0.35f, 0.30f));
         }
 
+        // Borde oscuro
         GUI.color = new Color(0.04f, 0.08f, 0.12f, 0.95f);
         GUI.DrawTexture(new Rect(pt.x - markerSize * 0.5f - 2f, pt.y - markerSize * 0.5f - 2f, markerSize + 4f, markerSize + 4f), circleTexture);
 
+        // Círculo Verde / Cyan del Jugador
         GUI.color = new Color(0.1f, 1f, 0.6f, 1f);
         GUI.DrawTexture(new Rect(pt.x - markerSize * 0.5f, pt.y - markerSize * 0.5f, markerSize, markerSize), circleTexture);
 
+        // Flecha orientada según la rotación de cámara/jugador
         float playerAngle = Camera.main != null ? Camera.main.transform.eulerAngles.y : playerTransform.eulerAngles.y;
         Matrix4x4 oldMat = GUI.matrix;
         GUIUtility.RotateAroundPivot(playerAngle, pt);
@@ -628,6 +665,7 @@ public class MinimapManager : MonoBehaviour
         GUI.DrawTexture(new Rect(pt.x - arrSize * 0.5f, pt.y - arrSize * 0.65f, arrSize, arrSize), arrowTexture);
         GUI.matrix = oldMat;
 
+        // Etiqueta "TÚ"
         GUI.color = Color.white;
         GUI.Label(new Rect(pt.x - 20f, pt.y + 9f, 40f, 14f), "<b>TÚ</b>", labelStyle);
     }

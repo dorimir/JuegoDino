@@ -13,7 +13,7 @@ public class WinManager : MonoBehaviour
     [SerializeField] private int keysNeeded = 10;
 
     [Header("Meta")]
-
+    [Tooltip("Posición exacta de la puerta de salida")]
     [SerializeField] private Vector3 doorPosition = new Vector3(10.67f, 0.027f, 77.98f);
     [SerializeField] private GameObject finishObject;
     [SerializeField] private float finishRadius = 3.0f;

@@ -39,6 +39,7 @@ public static class PreyDistribution
             }
         }
 
+        // Si no hay líderes explícitos, tratar a todos como líderes individuales
         if (leaders.Count == 0)
         {
             leaders.AddRange(followers);
@@ -79,6 +80,7 @@ public static class PreyDistribution
             else break;
         }
 
+        // Posicionar a los líderes en los nodos elegidos distribuidos por el mapa
         for (int i = 0; i < leaderCount; i++)
         {
             EnemyAI leader = leaders[i];
@@ -118,6 +120,7 @@ public static class PreyDistribution
             }
         }
 
+        // Posicionar a los seguidores inmediatamente detrás de su líder en formación
         for (int i = 0; i < followers.Count; i++)
         {
             EnemyAI follower = followers[i];

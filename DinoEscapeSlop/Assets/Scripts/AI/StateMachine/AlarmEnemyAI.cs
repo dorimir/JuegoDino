@@ -1,26 +1,36 @@
 using System.Collections.Generic;
 using UnityEngine;
 
+/// <summary>
+/// Inteligencia Artificial para el enemigo avisador / centinela de alarma (Screamer).
+/// Cuando detecta al jugador permanece en su posición y emite una alarma a los demás dinosaurios.
+/// </summary>
 public class AlarmEnemyAI : EnemyAI
 {
     [Header("Configuración de Alerta y Rango")]
-
+    [Tooltip("Radio en unidades para alertar a otros dinosaurios.")]
     public float alertRadius = 100.0f;
 
+    [Tooltip("Si es verdadero, calcula automáticamente el radio como la mitad del mapa según los nodos de navegación.")]
     public bool autoCalculateHalfMapRadius = false;
 
+    [Tooltip("Frecuencia en segundos con la que se renueva y actualiza la posición del jugador a los dinosaurios que lo persiguen.")]
     public float alertBroadcastInterval = 1.0f;
 
+    [Tooltip("Tiempo en segundos que permanece en alerta tras perder la línea de visión antes de volver a patrullar.")]
     public float lostSightDuration = 4.0f;
 
+    [Tooltip("Velocidad de giro en grados por segundo para encarar al jugador mientras permanece quieto.")]
     public float turnSpeedWhenAlerting = 180f;
 
+    [Tooltip("Si es verdadero, ignora a los dinosaurios pequeños/presas para concentrarse en dar la alarma.")]
     public bool ignorePrey = true;
 
     [Header("Audio de Alarma")]
-
+    [Tooltip("Clip de sonido que se reproduce al detectar al jugador y dar la alarma.")]
     public AudioClip alarmSound;
 
+    [Tooltip("Fuente de audio opcional. Si no se asigna, se buscará o creará en el GameObject.")]
     public AudioSource alarmAudioSource;
 
     public AlarmPatrolState AlarmPatrol { get; protected set; }

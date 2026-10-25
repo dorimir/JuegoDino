@@ -1,5 +1,9 @@
 using UnityEngine;
 
+/// <summary>
+/// Inteligencia Artificial específica para el dinosaurio grande (T-Rex / depredador supremo).
+/// Caza al jugador y a los dinosaurios medianos. Ignora a los pequeños. Nunca huye de nadie.
+/// </summary>
 public class BigEnemyAI : EnemyAI
 {
     protected override void DeterminePreyOrPredator()
@@ -11,11 +15,13 @@ public class BigEnemyAI : EnemyAI
     {
         Tier = DinoTier.Big;
 
+        // Limpiar referencias de manada (el grande no tiene manada)
         isLeader = false;
         leaderTransform = null;
         LeaderAI = null;
         packFollowers.Clear();
 
+        // Estadísticas del depredador supremo: imponente, deliberado, imparable
         visionAngle   = 100f;
         visionRange   = 14.0f;
         DetectionRange = 14.0f;
@@ -24,8 +30,8 @@ public class BigEnemyAI : EnemyAI
 
         patrolSpeed   = 1.6f;
         chaseSpeed    = 5.5f;
-        fleeSpeed     = 0f;
-        SafeRange     = 0f;
+        fleeSpeed     = 0f;    // El grande NUNCA huye
+        SafeRange     = 0f;    // Sin rango de seguridad
     }
 
     protected override void SetupStateMachine()
@@ -40,7 +46,7 @@ public class BigEnemyAI : EnemyAI
 
         PatrolState    = bigPatrol;
         ChaseState     = bigChase;
-        FleeState      = null;
+        FleeState      = null;   // Sin estado de huida
         FollowLeaderState = null;
 
         StateMachine.AllowState(bigPatrol);
@@ -62,13 +68,14 @@ public class BigEnemyAI : EnemyAI
 
     public override void TriggerFlee(EnemyAI threat)
     {
-
+        // El dinosaurio grande NUNCA huye
     }
 
     public override void TriggerAttack(Transform target, EnemyAI targetDino = null)
     {
         if (target == null) return;
 
+        // El grande caza al jugador y a los medianos; ignora a los pequeños
         if (targetDino != null && !targetDino.IsMediumDino) return;
 
         CurrentChaseTarget = target;
@@ -88,7 +95,7 @@ public class BigEnemyAI : EnemyAI
 
     public override void NotifyPackFlee(EnemyAI threat)
     {
-
+        // El grande no huye ni avisa a nadie
     }
 
     public override void TriggerPatrol()

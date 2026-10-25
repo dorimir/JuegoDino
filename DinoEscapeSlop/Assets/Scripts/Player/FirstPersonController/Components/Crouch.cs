@@ -5,18 +5,19 @@ public class Crouch : MonoBehaviour
     public KeyCode key = KeyCode.LeftShift;
 
     [Header("Movimiento")]
-
+    [Tooltip("Componente de movimiento del personaje.")]
     public FirstPersonMovement movement;
-
+    [Tooltip("Velocidad de movimiento en sigilo / agachado.")]
     public float movementSpeed = 2.4f;
 
     [Header("Ajuste de Altura")]
-
+    [Tooltip("Transform de la cabeza/cámara al agacharse.")]
     public Transform headToLower;
     [HideInInspector]
     public float? defaultHeadYLocalPosition;
     public float crouchYHeadPosition = 0.9f;
 
+    [Tooltip("Collider a reducir al agacharse.")]
     public CapsuleCollider colliderToLower;
     [HideInInspector]
     public float? defaultColliderHeight;

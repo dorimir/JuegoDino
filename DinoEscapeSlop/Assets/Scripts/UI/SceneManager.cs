@@ -15,6 +15,10 @@ namespace StealthGame
             }
         }
 
+
+    /// <summary>
+    /// Alias compatible con el nombre del archivo SceneManager.cs.
+    /// </summary>
     public class SceneManager : SceneManagerScript
     {
     }

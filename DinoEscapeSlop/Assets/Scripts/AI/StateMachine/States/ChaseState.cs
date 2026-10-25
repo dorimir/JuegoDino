@@ -9,6 +9,10 @@ public class ChaseState : IState, IPriorityState
     protected float chaseDurationTimer;
     protected Vector3 lastKnownTargetPos;
 
+    /// <summary>
+    /// Nivel de prioridad del estado. Si este chase fue activado por la alarma de un avisador,
+    /// adquiere prioridad máxima (100) y bloquea cualquier interrupción de patrulla, huida o investigación.
+    /// </summary>
     public virtual int Priority => (ai != null && ai.isPriorityChase) ? 100 : 0;
 
     public ChaseState(EnemyAI ai)
@@ -42,7 +46,7 @@ public class ChaseState : IState, IPriorityState
 
     public virtual void Update()
     {
-
+        // Si aparece un depredador superior en el cono de visión, se cancela la persecución para huir
         if (!ai.isPriorityChase && ai.CanSeeThreat(out EnemyAI threat))
         {
             if (ai.IsSmallDino) ai.NotifyPackFlee(threat);
@@ -123,6 +127,7 @@ public class ChaseState : IState, IPriorityState
             return;
         }
 
+        // Emboscador: duración de persecución máxima antes de volver a ocultarse
         if (ai.dinoEmboscador)
         {
             chaseDurationTimer += Time.deltaTime;

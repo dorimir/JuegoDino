@@ -49,7 +49,7 @@ public class PatrolState : IState
 
     protected virtual bool CheckPerceptions()
     {
-
+        // 1. Detección de amenazas según jerarquía (Pequeño huye de Mediano y Grande; Mediano huye de Grande)
         if (ai.CanSeeThreat(out EnemyAI threat))
         {
             if (ai.IsSmallDino) ai.NotifyPackFlee(threat);
@@ -57,6 +57,7 @@ public class PatrolState : IState
             return true;
         }
 
+        // 2. Detección y caza del Jugador (los tres arquetipos cazan al jugador)
         if (ai.CanSeePlayer())
         {
             if (ai.IsSmallDino) ai.NotifyPackAttack(ai.Player);
@@ -64,12 +65,14 @@ public class PatrolState : IState
             return true;
         }
 
+        // 3. Detección y caza de presas según jerarquía (Grande caza Mediano; Mediano caza Pequeño)
         if (ai.preyCooldownTimer <= 0f && ai.CanSeeHuntablePrey(out EnemyAI huntablePrey))
         {
             ai.TriggerAttack(huntablePrey.transform, huntablePrey);
             return true;
         }
 
+        // 4. Lógica de manada para dinosaurios pequeños
         if (ai.IsSmallDino)
         {
             CheckMutualEncounters();

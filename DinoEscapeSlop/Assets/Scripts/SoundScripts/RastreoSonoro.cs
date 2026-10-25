@@ -166,7 +166,7 @@ public class RastreoSonoro : MonoBehaviour
         if (bestFuente != null)
         {
             soundPos = bestFuente.transform.position;
-            intensity = 2.2f;
+            intensity = 2.2f; // Prioridad muy alta, superior al ruido del jugador
             soundSource = bestFuente.transform;
             return true;
         }
