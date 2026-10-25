@@ -1,0 +1,8 @@
+# Material file for Linterna.obj
+newmtl lambert7SG
+Ka 1.000 1.000 1.000
+Kd 0.800 0.800 0.800
+Ks 0.200 0.200 0.200
+d 1.0
+illum 2
+map_Kd ../textures/UV5.png

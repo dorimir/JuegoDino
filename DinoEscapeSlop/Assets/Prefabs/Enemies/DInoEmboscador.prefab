@@ -73,7 +73,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 0355e9165ee84b24e83081cc0ffd14ce, type: 2}
+  - {fileID: 2100000, guid: c1912f302c804f6482d129a56cfdbde9, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -106,38 +106,38 @@ MonoBehaviour:
   m_GameObject: {fileID: 2828899245032434704}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a9f7f58a16828c440b3f276cd083c786, type: 3}
+  m_Script: {fileID: 11500000, guid: 73a29660258c4cb5b63cd37f2c621171, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
+  m_EditorClassIdentifier: Assembly-CSharp::AmbushEnemyAI
   Player: {fileID: 0}
   isLeader: 0
   leaderTransform: {fileID: 0}
   packFollowers: []
   dinoCiego: 0
-  dinoEmboscador: 0
+  dinoEmboscador: 1
   ambushStalkRange: 9
-  ambushTriggerRange: 5
-  ambushWarningTime: 1.2
-  ambushAttackDuration: 2
-  ambushAttackSpeed: 11
-  ambushTurnRate: 90
-  ambushTiredTime: 4
+  ambushTriggerRange: 8
+  ambushWarningTime: 0.8
+  ambushAttackDuration: 7
+  ambushAttackSpeed: 10.5
+  ambushTurnRate: 160
+  ambushTiredTime: 2.5
   AmbushHomePos: {x: 0, y: 0, z: 0}
   AmbushHomeRot: {x: 0, y: 0, z: 0, w: 0}
   IsPrey: 0
   SafeRange: 22
-  visionRange: 7.5
-  visionAngle: 100
-  eyeHeight: 0.65
+  visionRange: 9
+  visionAngle: 110
+  eyeHeight: 0.85
   DetectionRange: 15
-  LoseRange: 25
-  AttackRange: 2.5
+  LoseRange: 16
+  AttackRange: 2
   patrolSpeed: 2.4
-  chaseSpeed: 7.8
+  chaseSpeed: 10.5
   fleeSpeed: 10.5
   preyMaxChaseTime: 3.5
   preyLostSightTime: 2
-  playerLostSightTime: 5
+  playerLostSightTime: 3.5
   preyChaseCooldown: 3
   preyCooldownTimer: 0
   FlockRadius: 10
@@ -325,7 +325,7 @@ PrefabInstance:
         type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 0355e9165ee84b24e83081cc0ffd14ce, type: 2}
+      objectReference: {fileID: 2100000, guid: c1912f302c804f6482d129a56cfdbde9, type: 2}
     - target: {fileID: 919132149155446097, guid: c0901832d786b744487f7131fea83654,
         type: 3}
       propertyPath: m_Name

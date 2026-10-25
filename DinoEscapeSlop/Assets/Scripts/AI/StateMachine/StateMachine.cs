@@ -1,11 +1,14 @@
 using System.Collections.Generic;
-using UnityEngine;
 
 public class StateMachine
 {
     public IState CurrentState { get; private set; }
 
-    private List<IState> allowedStates = new List<IState>();
+    private readonly List<IState> allowedStates = new List<IState>();
+
+    public IReadOnlyList<IState> AllowedStates => allowedStates;
+
+    public int CurrentStatePriority => (CurrentState is IPriorityState p) ? p.Priority : 0;
 
     public void AllowState(IState state)
     {
@@ -15,29 +18,38 @@ public class StateMachine
         }
     }
 
+    public bool IsStateAllowed(IState state) => state != null && allowedStates.Contains(state);
+
     public void Initialize(IState startingState)
     {
         if (startingState == null) return;
 
         AllowState(startingState);
-
         CurrentState = startingState;
         CurrentState.Enter();
     }
 
-    public void ChangeState(IState newState)
+    public bool ChangeState(IState newState, bool force = false)
     {
-        if (newState == null || newState == CurrentState) return;
+        if (newState == null || newState == CurrentState) return false;
 
-        // Si no estaba registrado previamente, lo registra automáticamente para no bloquear la transición
-        if (!allowedStates.Contains(newState))
+        if (allowedStates.Count > 0 && !allowedStates.Contains(newState))
         {
-            allowedStates.Add(newState);
+            return false;
+        }
+
+        int currentPriority = CurrentStatePriority;
+        int newPriority = (newState is IPriorityState p) ? p.Priority : 0;
+
+        if (!force && currentPriority > newPriority)
+        {
+            return false;
         }
 
         CurrentState?.Exit();
         CurrentState = newState;
         CurrentState.Enter();
+        return true;
     }
 
     public void Update()

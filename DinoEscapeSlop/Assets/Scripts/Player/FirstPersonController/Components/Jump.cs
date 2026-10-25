@@ -2,32 +2,37 @@ using UnityEngine;
 
 public class Jump : MonoBehaviour
 {
-    new Rigidbody rigidbody;
+    private new Rigidbody rigidbody;
     public float jumpStrength = 5.2f;
     public KeyCode jumpKey = KeyCode.Space;
     public event System.Action Jumped;
 
-    [SerializeField, Tooltip("Prevents jumping when the transform is in mid-air.")]
-    GroundCheck groundCheck;
+    [SerializeField]
+    private GroundCheck groundCheck;
 
-    void Reset()
+    private void Reset()
     {
         groundCheck = GetComponentInChildren<GroundCheck>();
     }
 
-    void Awake()
+    private void Awake()
     {
         rigidbody = GetComponent<Rigidbody>();
-        if (!groundCheck) groundCheck = GetComponentInChildren<GroundCheck>();
+        if (groundCheck == null)
+        {
+            groundCheck = GetComponentInChildren<GroundCheck>();
+        }
     }
 
-    void Update()
+    private void Update()
     {
-        // Jump when the Space key / Jump button is pressed and we are on the ground.
-        if ((Input.GetKeyDown(jumpKey) || Input.GetButtonDown("Jump")) && (!groundCheck || groundCheck.isGrounded))
+        if ((Input.GetKeyDown(jumpKey) || Input.GetButtonDown("Jump")) && (groundCheck == null || groundCheck.isGrounded))
         {
-            rigidbody.linearVelocity = new Vector3(rigidbody.linearVelocity.x, jumpStrength, rigidbody.linearVelocity.z);
-            Jumped?.Invoke();
+            if (rigidbody != null)
+            {
+                rigidbody.linearVelocity = new Vector3(rigidbody.linearVelocity.x, jumpStrength, rigidbody.linearVelocity.z);
+                Jumped?.Invoke();
+            }
         }
     }
 }

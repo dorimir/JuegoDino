@@ -12,55 +12,74 @@ public class AStarPathfinding : MonoBehaviour
 
     public void CacheNodes()
     {
-        cachedNodes = Object.FindObjectsByType<Node>(FindObjectsSortMode.None);
+        Node[] raw = Object.FindObjectsByType<Node>(FindObjectsSortMode.None);
+        if (raw == null)
+        {
+            cachedNodes = new Node[0];
+            return;
+        }
+
+        List<Node> valid = new List<Node>(raw.Length);
+        for (int i = 0; i < raw.Length; i++)
+        {
+            if (raw[i] != null && raw[i].gameObject.activeInHierarchy)
+            {
+                valid.Add(raw[i]);
+            }
+        }
+        cachedNodes = valid.ToArray();
     }
 
-    /// <summary>
-    /// Calcula la ruta A* entre dos posiciones del mundo y devuelve una lista de posiciones Vector3.
-    /// Utiliza estructuras locales para permitir que multiples enemigos calculen rutas concurrentemente
-    /// sin alterar los componentes Node de la escena.
-    /// </summary>
-    public List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos)
+    public List<Vector3> FindPath(Vector3 startPos, Vector3 targetPos, float clearanceRadius = 0.35f)
     {
+
+        if (HasClearLine(startPos, targetPos, clearanceRadius))
+        {
+            return new List<Vector3> { targetPos };
+        }
+
         Node startNode = GetClosestNode(startPos);
         Node targetNode = GetClosestNode(targetPos);
 
         if (startNode == null || targetNode == null) return null;
 
-        // Si el enemigo y el objetivo estan en el mismo nodo mas cercano
+        if (HasClearLine(startPos, targetNode.transform.position, clearanceRadius))
+        {
+            List<Vector3> directToTargetNode = new List<Vector3>();
+            float dStartToTargetNodeSqr = (startPos.x - targetNode.transform.position.x) * (startPos.x - targetNode.transform.position.x) +
+                                          (startPos.z - targetNode.transform.position.z) * (startPos.z - targetNode.transform.position.z);
+            float dTargetNodeToFinalSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) +
+                                          (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
+
+            if (dStartToTargetNodeSqr > 0.36f) directToTargetNode.Add(targetNode.transform.position);
+            if (dTargetNodeToFinalSqr > 0.36f) directToTargetNode.Add(targetPos);
+            if (directToTargetNode.Count == 0) directToTargetNode.Add(targetPos);
+            return directToTargetNode;
+        }
+
         if (startNode == targetNode)
         {
             List<Vector3> directPath = new List<Vector3>();
-            float dStartSqr = (startPos.x - targetNode.transform.position.x) * (startPos.x - targetNode.transform.position.x) + 
+            float dStartSqr = (startPos.x - targetNode.transform.position.x) * (startPos.x - targetNode.transform.position.x) +
                               (startPos.z - targetNode.transform.position.z) * (startPos.z - targetNode.transform.position.z);
-            float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) + 
+            float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) +
                                (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
 
-            if (dStartSqr > 0.36f)
-            {
-                directPath.Add(targetNode.transform.position);
-            }
-            if (dTargetSqr > 0.36f)
-            {
-                directPath.Add(targetPos);
-            }
-            if (directPath.Count == 0)
-            {
-                directPath.Add(targetPos);
-            }
+            if (dStartSqr > 0.36f) directPath.Add(targetNode.transform.position);
+            if (dTargetSqr > 0.36f) directPath.Add(targetPos);
+            if (directPath.Count == 0) directPath.Add(targetPos);
             return directPath;
         }
 
-        List<Node> openSet = new List<Node>();
+        List<Node> openSet = new List<Node> { startNode };
         HashSet<Node> closedSet = new HashSet<Node>();
 
-        Dictionary<Node, int> gCosts = new Dictionary<Node, int>();
-        Dictionary<Node, int> hCosts = new Dictionary<Node, int>();
+        Dictionary<Node, int> gCosts = new Dictionary<Node, int> { [startNode] = 0 };
+        Dictionary<Node, int> hCosts = new Dictionary<Node, int> { [startNode] = GetDistance(startNode, targetNode) };
         Dictionary<Node, Node> parentMap = new Dictionary<Node, Node>();
 
-        openSet.Add(startNode);
-        gCosts[startNode] = 0;
-        hCosts[startNode] = GetDistance(startNode, targetNode);
+        Node closestToTarget = startNode;
+        int minH = hCosts[startNode];
 
         while (openSet.Count > 0)
         {
@@ -82,21 +101,30 @@ public class AStarPathfinding : MonoBehaviour
             openSet.Remove(currentNode);
             closedSet.Add(currentNode);
 
+            if (hCosts.TryGetValue(currentNode, out int curH) && curH < minH)
+            {
+                minH = curH;
+                closestToTarget = currentNode;
+            }
+
             if (currentNode == targetNode)
             {
-                List<Vector3> path = RetracePath(startNode, targetNode, parentMap);
-                float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) + 
+                List<Vector3> rawPath = RetracePath(startNode, targetNode, parentMap);
+                float dTargetSqr = (targetNode.transform.position.x - targetPos.x) * (targetNode.transform.position.x - targetPos.x) +
                                    (targetNode.transform.position.z - targetPos.z) * (targetNode.transform.position.z - targetPos.z);
-                if (path != null && dTargetSqr > 0.36f)
+                if (rawPath != null && dTargetSqr > 0.36f)
                 {
-                    path.Add(targetPos);
+                    rawPath.Add(targetPos);
                 }
-                return path;
+
+                return OptimizePathWithRaycast(rawPath, startPos, clearanceRadius);
             }
+
+            if (currentNode.neighbors == null) continue;
 
             foreach (Node neighbor in currentNode.neighbors)
             {
-                if (neighbor == null || closedSet.Contains(neighbor)) continue;
+                if (neighbor == null || !neighbor.gameObject.activeInHierarchy || closedSet.Contains(neighbor)) continue;
 
                 int movementCostToNeighbor = gCosts[currentNode] + GetDistance(currentNode, neighbor);
 
@@ -114,7 +142,56 @@ public class AStarPathfinding : MonoBehaviour
             }
         }
 
-        return null; // Si no hay camino posible
+        if (closestToTarget != null && closestToTarget != startNode)
+        {
+            List<Vector3> partialPath = RetracePath(startNode, closestToTarget, parentMap);
+            return OptimizePathWithRaycast(partialPath, startPos, clearanceRadius);
+        }
+
+        return null;
+    }
+
+    public static List<Vector3> OptimizePathWithRaycast(List<Vector3> rawPath, Vector3 startPos, float clearanceRadius = 0.35f)
+    {
+        if (rawPath == null || rawPath.Count <= 1) return rawPath;
+
+        Vector3 finalPoint = rawPath[rawPath.Count - 1];
+        if (HasClearLine(startPos, finalPoint, clearanceRadius))
+        {
+            return new List<Vector3> { finalPoint };
+        }
+
+        List<Vector3> smoothed = new List<Vector3>();
+        Vector3 currentPoint = startPos;
+        int currentIndex = -1;
+
+        while (currentIndex < rawPath.Count - 1)
+        {
+            int furthestVisible = -1;
+            for (int i = rawPath.Count - 1; i > currentIndex; i--)
+            {
+                if (HasClearLine(currentPoint, rawPath[i], clearanceRadius))
+                {
+                    furthestVisible = i;
+                    break;
+                }
+            }
+
+            if (furthestVisible != -1 && furthestVisible > currentIndex)
+            {
+                smoothed.Add(rawPath[furthestVisible]);
+                currentPoint = rawPath[furthestVisible];
+                currentIndex = furthestVisible;
+            }
+            else
+            {
+                currentIndex++;
+                smoothed.Add(rawPath[currentIndex]);
+                currentPoint = rawPath[currentIndex];
+            }
+        }
+
+        return smoothed;
     }
 
     private List<Vector3> RetracePath(Node startNode, Node endNode, Dictionary<Node, Node> parentMap)
@@ -128,14 +205,11 @@ public class AStarPathfinding : MonoBehaviour
             visited.Add(currentNode);
             path.Add(currentNode.transform.position);
 
-            if (currentNode == startNode)
-            {
-                break;
-            }
+            if (currentNode == startNode) break;
 
-            if (parentMap.ContainsKey(currentNode))
+            if (parentMap.TryGetValue(currentNode, out Node nextNode))
             {
-                currentNode = parentMap[currentNode];
+                currentNode = nextNode;
             }
             else
             {
@@ -163,55 +237,60 @@ public class AStarPathfinding : MonoBehaviour
         return cachedNodes;
     }
 
-    /// <summary>
-    /// Comprueba si existe una trayectoria despejada entre dos posiciones en el plano horizontal (sin muros ni obstaculos que bloqueen el paso).
-    /// Realiza comprobaciones a la altura del cuerpo (y = 0.75m) usando Linecast y SphereCast con margen para el collider del dinosaurio.
-    /// </summary>
+    public static bool IsNavObstacle(Collider col)
+    {
+        if (col == null || col.isTrigger) return false;
+        if (col.CompareTag("Enemy") || col.GetComponentInParent<EnemyAI>() != null) return false;
+        if (col.CompareTag("Player") || col.GetComponentInParent<FirstPersonMovement>() != null) return false;
+        if (col.CompareTag("canPickUp") || col.CompareTag("Key")) return false;
+        if (col.GetComponentInParent<Linterna>() != null || col.GetComponentInParent<RastreoSonoro>() != null) return false;
+
+        string hitName = col.gameObject.name.ToLower();
+        if (hitName.Contains("plane") || hitName.Contains("floor") || hitName.Contains("suelo")) return false;
+
+        return true;
+    }
+
     public static bool HasClearLine(Vector3 fromPos, Vector3 toPos, float clearanceRadius = 0.35f)
     {
-        float testHeight = 0.75f;
-        Vector3 origin = new Vector3(fromPos.x, testHeight, fromPos.z);
-        Vector3 target = new Vector3(toPos.x, testHeight, toPos.z);
+        float rayHeight = 0.75f;
+        Vector3 origin = new Vector3(fromPos.x, fromPos.y + rayHeight, fromPos.z);
+        Vector3 target = new Vector3(toPos.x, toPos.y + rayHeight, toPos.z);
         Vector3 dir = target - origin;
         float dist = dir.magnitude;
 
         if (dist <= 0.4f) return true;
 
-        // Excluir capa 3 (Dinosaurios) y capa 2 (Ignore Raycast)
         int wallLayerMask = ~((1 << 3) | (1 << 2));
 
-        // 1. Linecast directo: detecta muros finos o esquinas intermedias
         if (Physics.Linecast(origin, target, out RaycastHit lineHit, wallLayerMask, QueryTriggerInteraction.Ignore))
         {
-            if (lineHit.collider != null && !lineHit.collider.CompareTag("Enemy") && lineHit.normal.y < 0.7f)
+            if (lineHit.normal.y < 0.7f && IsNavObstacle(lineHit.collider))
             {
                 return false;
             }
         }
 
-        // 2. SphereCast con margen lateral para comprobar el paso físico del cuerpo del dinosaurio
         if (dist > clearanceRadius * 2f)
         {
             Vector3 fwdOrigin = origin + dir.normalized * 0.15f;
             float castDist = Mathf.Max(0.05f, dist - 0.3f);
 
             RaycastHit[] hits = Physics.SphereCastAll(fwdOrigin, clearanceRadius, dir.normalized, castDist, wallLayerMask, QueryTriggerInteraction.Ignore);
-            foreach (var hit in hits)
+            for (int i = 0; i < hits.Length; i++)
             {
-                if (hit.collider == null) continue;
-                if (hit.collider.CompareTag("Enemy")) continue;
-                if (hit.normal.y >= 0.7f) continue; // Suelo o rampa
-
-                return false;
+                RaycastHit hit = hits[i];
+                if (hit.normal.y >= 0.7f) continue;
+                if (IsNavObstacle(hit.collider))
+                {
+                    return false;
+                }
             }
         }
 
         return true;
     }
 
-    /// <summary>
-    /// Devuelve todos los nodos del grafo que son directamente accesibles mediante Raycast desde la posicion indicada.
-    /// </summary>
     public List<Node> GetReachableNodes(Vector3 worldPos)
     {
         List<Node> reachable = new List<Node>();
@@ -222,9 +301,10 @@ public class AStarPathfinding : MonoBehaviour
 
         if (cachedNodes == null) return reachable;
 
-        foreach (Node node in cachedNodes)
+        for (int i = 0; i < cachedNodes.Length; i++)
         {
-            if (node != null && HasClearLine(worldPos, node.transform.position))
+            Node node = cachedNodes[i];
+            if (node != null && node.gameObject.activeInHierarchy && HasClearLine(worldPos, node.transform.position))
             {
                 reachable.Add(node);
             }
@@ -233,11 +313,6 @@ public class AStarPathfinding : MonoBehaviour
         return reachable;
     }
 
-    /// <summary>
-    /// Encuentra el nodo del grafo mas cercano a una posicion del mundo (en el plano horizontal XZ).
-    /// Prioriza mediante Raycast los nodos transitables y visibles sin muros de por medio,
-    /// recurriendo al mas cercano euclideo si no hay ninguno directamente visible.
-    /// </summary>
     public Node GetClosestNode(Vector3 worldPos)
     {
         if (cachedNodes == null || cachedNodes.Length == 0)
@@ -245,20 +320,17 @@ public class AStarPathfinding : MonoBehaviour
             CacheNodes();
         }
 
-        if (cachedNodes == null || cachedNodes.Length == 0)
-        {
-            return null;
-        }
+        if (cachedNodes == null || cachedNodes.Length == 0) return null;
 
         Node closestReachable = null;
         float minReachableDistSqr = Mathf.Infinity;
-
         Node closestFallback = null;
         float minFallbackDistSqr = Mathf.Infinity;
 
-        foreach (Node node in cachedNodes)
+        for (int i = 0; i < cachedNodes.Length; i++)
         {
-            if (node == null) continue;
+            Node node = cachedNodes[i];
+            if (node == null || !node.gameObject.activeInHierarchy) continue;
 
             float dx = worldPos.x - node.transform.position.x;
             float dz = worldPos.z - node.transform.position.z;
@@ -270,23 +342,21 @@ public class AStarPathfinding : MonoBehaviour
                 closestFallback = node;
             }
 
-            if (HasClearLine(worldPos, node.transform.position))
+            if (HasClearLine(worldPos, node.transform.position) && distSqr < minReachableDistSqr)
             {
-                if (distSqr < minReachableDistSqr)
-                {
-                    minReachableDistSqr = distSqr;
-                    closestReachable = node;
-                }
+                minReachableDistSqr = distSqr;
+                closestReachable = node;
             }
+        }
+
+        if (closestFallback != null && minFallbackDistSqr <= 1.0f)
+        {
+            return closestFallback;
         }
 
         return closestReachable != null ? closestReachable : closestFallback;
     }
 
-    /// <summary>
-    /// Encuentra el nodo del grafo más alejado de un nodo de referencia.
-    /// Utilizado por el modo huida para alejarse lo máximo posible del nodo más cercano al peligro.
-    /// </summary>
     public Node GetFarthestNodeFrom(Node referenceNode)
     {
         if (referenceNode == null) return null;
@@ -295,11 +365,12 @@ public class AStarPathfinding : MonoBehaviour
 
         Node farthestNode = null;
         float maxDistSqr = -1f;
-
         Vector3 refPos = referenceNode.transform.position;
-        foreach (Node node in allNodes)
+
+        for (int i = 0; i < allNodes.Length; i++)
         {
-            if (node == null || node == referenceNode) continue;
+            Node node = allNodes[i];
+            if (node == null || !node.gameObject.activeInHierarchy || node == referenceNode) continue;
             float dx = node.transform.position.x - refPos.x;
             float dz = node.transform.position.z - refPos.z;
             float distSqr = dx * dx + dz * dz;
@@ -314,13 +385,9 @@ public class AStarPathfinding : MonoBehaviour
         return farthestNode;
     }
 
-    /// <summary>
-    /// Sabiendo cual es el nodo más cercano a una posición (amenaza), devuelve el nodo más alejado posible de él.
-    /// </summary>
     public Node GetFarthestNodeFromPosition(Vector3 threatPos)
     {
         Node closestToThreat = GetClosestNode(threatPos);
-        if (closestToThreat == null) return null;
-        return GetFarthestNodeFrom(closestToThreat);
+        return closestToThreat != null ? GetFarthestNodeFrom(closestToThreat) : null;
     }
 }

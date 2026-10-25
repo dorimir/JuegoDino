@@ -126,7 +126,6 @@ GameObject:
   - component: {fileID: 9189315817889740933}
   - component: {fileID: 5655240291243869753}
   - component: {fileID: 4630179485368995112}
-  - component: {fileID: 6543286132499794431}
   - component: {fileID: 1905608394709846998}
   - component: {fileID: 4479256263700290013}
   - component: {fileID: 9048202676625483898}
@@ -146,7 +145,7 @@ Transform:
   m_GameObject: {fileID: 4901828757827518931}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 46.85, y: 1.0437568, z: 49.01}
+  m_LocalPosition: {x: 46.85, y: 0, z: 49.01}
   m_LocalScale: {x: 2.0875149, y: 2.0875149, z: 2.0875149}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -187,7 +186,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 0355e9165ee84b24e83081cc0ffd14ce, type: 2}
+  - {fileID: 2100000, guid: d7aebcc392ca48d9a30b25c74d8ba63e, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -220,9 +219,9 @@ MonoBehaviour:
   m_GameObject: {fileID: 4901828757827518931}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: a9f7f58a16828c440b3f276cd083c786, type: 3}
+  m_Script: {fileID: 11500000, guid: 79148eb7ec3c3904fa105ba52228676d, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::EnemyAI
+  m_EditorClassIdentifier: Assembly-CSharp::BlindEnemyAI
   Player: {fileID: 0}
   isLeader: 0
   leaderTransform: {fileID: 0}
@@ -293,20 +292,6 @@ MeshCollider:
   m_Convex: 1
   m_CookingOptions: 30
   m_Mesh: {fileID: 10202, guid: 0000000000000000e000000000000000, type: 0}
---- !u!114 &6543286132499794431
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4901828757827518931}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 6a290a7fbd92a9a44a94b084e6b7213a, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::DinoSordo
-  colliderOido: {fileID: 4682040814898576038}
-  cooldown: 3
 --- !u!114 &1905608394709846998
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -443,7 +428,7 @@ PrefabInstance:
         type: 3}
       propertyPath: 'm_Materials.Array.data[0]'
       value: 
-      objectReference: {fileID: 2100000, guid: 0355e9165ee84b24e83081cc0ffd14ce, type: 2}
+      objectReference: {fileID: 2100000, guid: d7aebcc392ca48d9a30b25c74d8ba63e, type: 2}
     - target: {fileID: 919132149155446097, guid: c0901832d786b744487f7131fea83654,
         type: 3}
       propertyPath: m_Name

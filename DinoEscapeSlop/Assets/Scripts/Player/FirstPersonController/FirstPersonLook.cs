@@ -2,46 +2,56 @@ using UnityEngine;
 
 public class FirstPersonLook : MonoBehaviour
 {
-    [SerializeField]
-    Transform character;
-    public float sensitivity = 2;
+    [SerializeField] private Transform character;
+    public float sensitivity = 2f;
     public float smoothing = 1.5f;
 
-    Vector2 velocity;
-    Vector2 frameVelocity;
+    public static bool IsCameraLocked { get; set; }
 
-    void Reset()
+    private Vector2 velocity;
+    private Vector2 frameVelocity;
+
+    private void Reset()
     {
-        // Get the character from the FirstPersonMovement in parents.
         FirstPersonMovement fpm = GetComponentInParent<FirstPersonMovement>();
-        if (fpm) character = fpm.transform;
+        if (fpm != null)
+        {
+            character = fpm.transform;
+        }
     }
 
-    void Start()
+    private void Start()
     {
-        // Asegurar que character esté asignado incluso en tiempo de ejecución
-        if (!character)
+        IsCameraLocked = false;
+
+        if (character == null)
         {
             FirstPersonMovement fpm = GetComponentInParent<FirstPersonMovement>();
-            if (fpm) character = fpm.transform;
+            if (fpm != null)
+            {
+                character = fpm.transform;
+            }
         }
 
-        // Lock the mouse cursor to the game screen.
         Cursor.lockState = CursorLockMode.Locked;
     }
 
-    void Update()
+    private void Update()
     {
-        // Get smooth velocity.
+        if (EnemyAI.GlobalPlayerDead || IsCameraLocked)
+        {
+            frameVelocity = Vector2.zero;
+            return;
+        }
+
         Vector2 mouseDelta = new Vector2(Input.GetAxisRaw("Mouse X"), Input.GetAxisRaw("Mouse Y"));
         Vector2 rawFrameVelocity = Vector2.Scale(mouseDelta, Vector2.one * sensitivity);
-        frameVelocity = Vector2.Lerp(frameVelocity, rawFrameVelocity, 1 / smoothing);
+        frameVelocity = Vector2.Lerp(frameVelocity, rawFrameVelocity, 1f / smoothing);
         velocity += frameVelocity;
-        velocity.y = Mathf.Clamp(velocity.y, -90, 90);
+        velocity.y = Mathf.Clamp(velocity.y, -90f, 90f);
 
-        // Rotate camera up-down and controller left-right from velocity.
         transform.localRotation = Quaternion.AngleAxis(-velocity.y, Vector3.right);
-        if (character)
+        if (character != null)
         {
             character.localRotation = Quaternion.AngleAxis(velocity.x, Vector3.up);
         }

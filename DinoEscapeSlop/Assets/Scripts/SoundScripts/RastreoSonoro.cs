@@ -1,15 +1,13 @@
-
-using UnityEngine;
 using System.Collections.Generic;
+using UnityEngine;
 
 public class RastreoSonoro : MonoBehaviour
 {
-    public static readonly List<RastreoSonoro> Activos =
-        new List<RastreoSonoro>();
+    public static readonly List<RastreoSonoro> Activos = new List<RastreoSonoro>();
 
     [Header("Sonido")]
     public AudioSource sonido;
-    public float radioSonoro = 15f;
+    public float radioSonoro = 20f;
     public bool Recogido;
 
     [Header("Lanzamiento")]
@@ -17,13 +15,25 @@ public class RastreoSonoro : MonoBehaviour
     public float graciaInicial = 0.3f;
     public float velocidadParada = 0.5f;
 
+    [Header("Distracción al Aterrizar")]
+    public float duracionSonidoAterrizaje = 8f;
+
     private Rigidbody rbObjeto;
     private bool enVuelo;
     private float inicioVuelo;
+    private bool sonandoPorAterrizaje;
+    private float tiempoAterrizaje;
+
+    public bool EstaEmiteSonidoActivo => Recogido || enVuelo || sonandoPorAterrizaje || (sonido != null && sonido.isPlaying);
 
     private void Awake()
     {
         rbObjeto = GetComponent<Rigidbody>();
+
+        if (TryGetComponent<MeshRenderer>(out var mr))
+        {
+            mr.enabled = false;
+        }
 
         if (sonido != null)
         {
@@ -35,7 +45,9 @@ public class RastreoSonoro : MonoBehaviour
     private void OnEnable()
     {
         if (!Activos.Contains(this))
+        {
             Activos.Add(this);
+        }
     }
 
     private void OnDisable()
@@ -47,15 +59,22 @@ public class RastreoSonoro : MonoBehaviour
     {
         if (enVuelo)
         {
-            if (Time.time - inicioVuelo >= tiempoMaxVuelo)
+            float flightTime = Time.time - inicioVuelo;
+            if (flightTime >= tiempoMaxVuelo)
             {
-                Soltar();
+                Aterrizar();
             }
-            else if (Time.time - inicioVuelo >= graciaInicial &&
-                     rbObjeto != null &&
-                     rbObjeto.linearVelocity.magnitude < velocidadParada)
+            else if (flightTime >= graciaInicial && rbObjeto != null && rbObjeto.linearVelocity.magnitude < velocidadParada)
             {
-                Soltar();
+                Aterrizar();
+            }
+        }
+        else if (sonandoPorAterrizaje)
+        {
+            if (Time.time - tiempoAterrizaje >= duracionSonidoAterrizaje)
+            {
+                sonandoPorAterrizaje = false;
+                ActivarSonido(false);
             }
         }
     }
@@ -63,12 +82,14 @@ public class RastreoSonoro : MonoBehaviour
     public void Recoger()
     {
         enVuelo = false;
+        sonandoPorAterrizaje = false;
         ActivarSonido(true);
     }
 
     public void Soltar()
     {
         enVuelo = false;
+        sonandoPorAterrizaje = false;
         ActivarSonido(false);
     }
 
@@ -76,31 +97,98 @@ public class RastreoSonoro : MonoBehaviour
     {
         inicioVuelo = Time.time;
         enVuelo = true;
+        sonandoPorAterrizaje = false;
         ActivarSonido(true);
+    }
+
+    private void Aterrizar()
+    {
+        enVuelo = false;
+        sonandoPorAterrizaje = true;
+        tiempoAterrizaje = Time.time;
+        ActivarSonido(true);
+
+        NotificarACiegos(transform.position, radioSonoro, 2.2f);
     }
 
     private void ActivarSonido(bool activo)
     {
         Recogido = activo;
-
         if (sonido == null) return;
 
         if (activo && !sonido.isPlaying)
+        {
             sonido.Play();
+        }
         else if (!activo && sonido.isPlaying)
+        {
             sonido.Stop();
+        }
     }
 
     private void OnCollisionEnter(Collision collision)
     {
-        if (!enVuelo) return;
-        if (Time.time - inicioVuelo < graciaInicial) return;
+        if (!enVuelo || Time.time - inicioVuelo < graciaInicial) return;
 
-        if (collision.collider.CompareTag("Player") ||
-            collision.transform.root.CompareTag("Player"))
+        if (collision.collider.CompareTag("Player") || collision.transform.root.CompareTag("Player"))
+        {
             return;
+        }
 
-        Soltar();
+        Aterrizar();
+    }
+
+    public static bool HaySonidoObjetoActivo(Vector3 listenerPos, float multiplier, out Vector3 soundPos, out float intensity, out Transform soundSource)
+    {
+        soundPos = Vector3.zero;
+        intensity = 0f;
+        soundSource = null;
+
+        float bestDist = float.MaxValue;
+        RastreoSonoro bestFuente = null;
+
+        for (int i = 0; i < Activos.Count; i++)
+        {
+            RastreoSonoro fuente = Activos[i];
+            if (fuente == null || !fuente.gameObject.activeInHierarchy) continue;
+            if (!fuente.EstaEmiteSonidoActivo) continue;
+
+            float dist = Vector3.Distance(listenerPos, fuente.transform.position);
+            float effectiveRadius = (fuente.radioSonoro > 0f ? fuente.radioSonoro : 20f) * multiplier;
+
+            if (dist <= effectiveRadius && dist < bestDist)
+            {
+                bestDist = dist;
+                bestFuente = fuente;
+            }
+        }
+
+        if (bestFuente != null)
+        {
+            soundPos = bestFuente.transform.position;
+            intensity = 2.2f;
+            soundSource = bestFuente.transform;
+            return true;
+        }
+
+        return false;
+    }
+
+    public static void NotificarACiegos(Vector3 pos, float radio, float intensidad)
+    {
+        if (EnemyAI.AllEnemies == null) return;
+        for (int i = 0; i < EnemyAI.AllEnemies.Count; i++)
+        {
+            EnemyAI enemy = EnemyAI.AllEnemies[i];
+            if (enemy is BlindEnemyAI blind && blind.gameObject.activeInHierarchy)
+            {
+                float dist = Vector3.Distance(blind.transform.position, pos);
+                if (dist <= radio * blind.hearingSensitivityMultiplier)
+                {
+                    blind.NotificarSonidoPrioritario(pos, intensidad, null);
+                }
+            }
+        }
     }
 
     private void OnDrawGizmosSelected()

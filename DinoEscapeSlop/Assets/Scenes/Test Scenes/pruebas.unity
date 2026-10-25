@@ -1631,7 +1631,7 @@ PrefabInstance:
     - target: {fileID: 3009193123022946767, guid: f07a903126f126f4294cb2c2c6cf64b8,
         type: 3}
       propertyPath: m_Name
-      value: DInoSumiso
+      value: DInoSeguidor
       objectReference: {fileID: 0}
     - target: {fileID: 3353838593235130167, guid: f07a903126f126f4294cb2c2c6cf64b8,
         type: 3}

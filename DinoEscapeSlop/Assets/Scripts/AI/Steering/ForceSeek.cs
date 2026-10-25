@@ -3,75 +3,61 @@
 public class ForcesSeek : MonoBehaviour
 {
     private Vector3 target;
-    private bool Arrival = false;
-    private float smooothness = 0.5f;
-    private float repel = 0.5f;
-    private float radius = 10f;
-    private Vector3 counterforce = new Vector3(0,0,0);
-    private Vector3 force = new Vector3(0,0,0);
-    private Vector3 desired = new Vector3(0,0,0);
-    private float maxspeed = 2.5F; 
+    private bool arrival;
 
-    void Start(){ }
+    [SerializeField] private float smoothness = 0.5f;
+    [SerializeField] private float repel = 0.5f;
+    [SerializeField] private float radius = 10f;
+    [SerializeField] private float maxSpeed = 2.5f;
 
-    void FixedUpdate()
+    private void FixedUpdate()
     {
-        rotation(target);
-        forceForward(target);
+        RotateTowardsTarget(target);
+        ApplyForwardForce(target);
     }
 
-    public void setTarget(Vector3 newTarget)
-    {
-        target = newTarget;
-    }
+    public void SetTarget(Vector3 newTarget) => target = newTarget;
+    public void setTarget(Vector3 newTarget) => SetTarget(newTarget);
 
-    public void setArrival(bool newArrival)
-    {
-        Arrival = newArrival;
-    }
+    public void SetArrival(bool newArrival) => arrival = newArrival;
+    public void setArrival(bool newArrival) => SetArrival(newArrival);
 
-    private void rotation(Vector3 targetPosition)
+    private void RotateTowardsTarget(Vector3 targetPosition)
     {
         if (targetPosition == Vector3.zero) return;
-        desired = targetPosition - this.transform.position;
+        Vector3 desired = targetPosition - transform.position;
         if (desired.sqrMagnitude < 0.001f) return;
 
         Quaternion targetRotation = Quaternion.LookRotation(desired);
-        this.transform.rotation = Quaternion.Slerp(this.transform.rotation, targetRotation, Time.deltaTime * maxspeed);
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetRotation, Time.deltaTime * maxSpeed);
     }
 
-    private void forceForward(Vector3 targetPosition)
+    private void ApplyForwardForce(Vector3 targetPosition)
     {
         if (targetPosition == Vector3.zero) return;
-        ConstantForce cf = GetComponent<ConstantForce>();
-        if (cf == null) return;
+        if (!TryGetComponent<ConstantForce>(out var cf)) return;
 
-        force = Vector3.Lerp(this.transform.position, targetPosition, smooothness * Time.deltaTime);
+        Vector3 force = Vector3.Lerp(transform.position, targetPosition, smoothness * Time.deltaTime);
+        force = new Vector3(0, 0, Mathf.Abs(force.z));
 
-        if (force.z < 0)
+        if (arrival)
         {
-            force = new Vector3(0, 0, -force.z);
-        }
-        else
-        {
-            force = new Vector3(0, 0, force.z);
-        }
-
-        if (Arrival)
-        {
-            desired = targetPosition - this.transform.position;
+            Vector3 desired = targetPosition - transform.position;
             float distance = Mathf.Sqrt(desired.x * desired.x + desired.z * desired.z);
-            if (distance < 0) distance = -distance;
-            
+
             if (distance < radius)
             {
                 float ratio = distance / radius;
-                counterforce = new Vector3(0, 0, force.z * (1f + (1 - ratio)) * repel); 
-                force = new Vector3(0, 0, force.z);
-                cf.relativeForce = (force - counterforce) * ratio; 
+                Vector3 counterforce = new Vector3(0, 0, force.z * (1f + (1f - ratio)) * repel);
+                cf.relativeForce = (force - counterforce) * ratio;
+                return;
             }
-            else cf.relativeForce = force; 
         }
-        else cf.relativeForce = force; 
+
+        cf.relativeForce = force;
     }
+}
+
+public class ForceSeek : ForcesSeek
+{
 }

@@ -1,19 +1,30 @@
+﻿using System.Collections.Generic;
 using UnityEngine;
 
-/// <summary>
-/// Modo Huida (Flee):
-/// Los dinosaurios pequeños huyen hacia el nodo más alejado del dinosaurio grande que han visto,
-/// asegurando que dicho nodo siempre pueda ser alcanzado directamente mediante Raycast.
-/// La huida durará mientras se mantenga en el rango del dinosaurio grande, más 3 segundos continuos fuera de su rango.
-/// </summary>
 public class FleeState : IState
 {
     private EnemyAI ai;
+    private EnemyAI triggeringPredator;
+    private Transform triggeringThreat;
+    private Vector3 lastKnownThreatPos;
+
+    private Node currentFleeNode;
+    private readonly List<Node> recentlyVisitedFleeNodes = new List<Node>();
+    private const int MaxRecentFleeNodes = 6;
+
     private float outOfRangeTimer;
-    private const float RequiredOutOfRangeDuration = 3.0f; // 3 segundos fuera de rango según especificación
-    private Vector3 targetSafePosition;
-    private float repathTimer;
-    private const float RepathInterval = 0.5f;
+    private const float RequiredOutOfRangeDuration = 3.0f;
+
+    private float stuckTimer;
+    private Vector3 lastStuckCheckPos;
+    private const float StuckInterval = 0.35f;
+    private const float MinMoveThreshold = 0.15f;
+
+    private float obstacleAvoidCooldown;
+    private const float ObstacleAvoidCooldownDuration = 0.25f;
+
+    private float nodeAdvanceCooldown;
+    private const float NodeAdvanceCooldownDuration = 0.45f;
 
     public FleeState(EnemyAI ai)
     {
@@ -22,208 +33,173 @@ public class FleeState : IState
 
     public void Enter()
     {
-        Debug.Log($"[{ai.gameObject.name}] ha entrado en MODO HUIDA (Color azul). Huyendo hacia el nodo más alejado alcanzable por Raycast.");
         outOfRangeTimer = 0f;
-        repathTimer = RepathInterval;
+        stuckTimer = 0f;
+        obstacleAvoidCooldown = 0f;
+        nodeAdvanceCooldown = 0f;
+        lastStuckCheckPos = ai.transform.position;
+        currentFleeNode = null;
+        recentlyVisitedFleeNodes.Clear();
 
-        // Visual azul para indicar huida
+        triggeringPredator = ai.ChasingPredator;
+        triggeringThreat = (triggeringPredator != null) ? triggeringPredator.transform : ai.CurrentThreat;
+
+        if (triggeringPredator != null)
+        {
+            if (triggeringPredator == ai || triggeringPredator == ai.LeaderAI ||
+                triggeringPredator.EffectiveLeader == ai.EffectiveLeader ||
+                (triggeringPredator is BlindEnemyAI || triggeringPredator is AmbushEnemyAI || triggeringPredator.dinoEmboscador))
+            {
+                ai.TriggerPatrol();
+                return;
+            }
+
+            if (ai.IsMediumDino && !triggeringPredator.IsBigDino)
+            {
+                ai.TriggerPatrol();
+                return;
+            }
+
+            if (ai.IsSmallDino && !triggeringPredator.IsMediumDino && !triggeringPredator.IsBigDino)
+            {
+                ai.TriggerPatrol();
+                return;
+            }
+        }
+
+        if (triggeringThreat != null && ai.IsSmallDino)
+        {
+            EnemyAI threatAI = triggeringThreat.GetComponentInParent<EnemyAI>();
+            if (threatAI != null && (threatAI is BlindEnemyAI || threatAI is AmbushEnemyAI || threatAI.dinoEmboscador))
+            {
+                ai.TriggerPatrol();
+                return;
+            }
+        }
+
+        if (triggeringThreat != null && triggeringThreat.gameObject.activeInHierarchy)
+        {
+            lastKnownThreatPos = triggeringThreat.position;
+        }
+        else if (ai.SpottedThreatPosition != Vector3.zero)
+        {
+            lastKnownThreatPos = ai.SpottedThreatPosition;
+        }
+        else
+        {
+            lastKnownThreatPos = ai.transform.position - ai.transform.forward * 5f;
+        }
+
         ai.SetVisualState(EnemyAI.DinoVisualState.Fleeing);
-
-        // Velocidad rápida de sprint de huida (13.0 m/s)
         if (ai.Movement != null)
         {
             ai.Movement.speed = ai.fleeSpeed;
             ai.Movement.ClearPath();
         }
 
-        FleeToFarthestNodeFromBigDino();
-    }
-
-    /// <summary>
-    /// Los pequeños huyen hacia el nodo más alejado del dinosaurio grande que han visto,
-    /// asegurando que dicho nodo siempre pueda ser alcanzado directamente mediante Raycast.
-    /// </summary>
-    private void FleeToFarthestNodeFromBigDino()
-    {
-        // 1. Obtener la posición del dinosaurio grande observado
-        Transform bigDinoTransform = null;
-        if (ai.ChasingPredator != null && ai.ChasingPredator.gameObject.activeInHierarchy)
-        {
-            bigDinoTransform = ai.ChasingPredator.transform;
-        }
-        else if (ai.CurrentThreat != null && ai.CurrentThreat.gameObject.activeInHierarchy)
-        {
-            bigDinoTransform = ai.CurrentThreat;
-        }
-
-        Vector3 bigDinoPos = (bigDinoTransform != null) ? bigDinoTransform.position : ai.SpottedThreatPosition;
-
-        if (ai.Pathfinding == null)
-        {
-            ai.Pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
-        }
-
-        Node[] allNodes = (ai.Pathfinding != null) ? ai.Pathfinding.GetAllNodes() : Object.FindObjectsByType<Node>(FindObjectsSortMode.None);
-        if (allNodes == null || allNodes.Length == 0) return;
-
-        Vector3 myPos = ai.transform.position;
-        Vector3 toBigDino = bigDinoPos - myPos;
-        toBigDino.y = 0f;
-        float currentDistToThreat = toBigDino.magnitude;
-
-        // 2. Buscar entre todos los nodos que el pequeño puede ALCANZAR MEDIANTE RAYCAST
-        Node farthestRaycastNode = null;
-        float maxDistToBigDino = -1f;
-
-        for (int i = 0; i < allNodes.Length; i++)
-        {
-            Node candidate = allNodes[i];
-            if (candidate == null) continue;
-
-            // COMPROBACIÓN OBLIGATORIA: El nodo DEBE poder ser alcanzado directamente mediante Raycast
-            bool canReachViaRaycast = (ai.Movement != null) ? ai.Movement.CanMoveToNode(candidate) : IsNodeReachableViaRaycast(candidate);
-            if (!canReachViaRaycast) continue;
-
-            float distToBig = Vector3.Distance(candidate.transform.position, bigDinoPos);
-
-            // Evitar elegir nodos que obliguen a correr en el vector frontal directo hacia el dinosaurio grande
-            Vector3 toNode = candidate.transform.position - myPos;
-            toNode.y = 0f;
-            if (toNode.sqrMagnitude > 0.05f && toBigDino.sqrMagnitude > 0.05f)
-            {
-                float dotToThreat = Vector3.Dot(toNode.normalized, toBigDino.normalized);
-                if (dotToThreat > 0.25f && distToBig <= currentDistToThreat)
-                {
-                    continue;
-                }
-            }
-
-            // Seleccionar el nodo alcanzable por Raycast que esté más alejado del dinosaurio grande
-            if (distToBig > maxDistToBigDino)
-            {
-                maxDistToBigDino = distToBig;
-                farthestRaycastNode = candidate;
-            }
-        }
-
-        // 3. Ir hacia el nodo alcanzable por Raycast más alejado
-        if (farthestRaycastNode != null)
-        {
-            targetSafePosition = farthestRaycastNode.transform.position;
-            Debug.Log($"[{ai.gameObject.name}] (Pequeño) huyendo mediante Raycast al nodo más alejado del grande: '{farthestRaycastNode.name}' (Distancia al grande: {maxDistToBigDino:F1}m)");
-
-            if (ai.Movement != null)
-            {
-                ai.Movement.MoveTo(targetSafePosition);
-            }
-        }
-        else
-        {
-            // Fallback 100% verificado por Raycast:
-            // Proyectar un Raycast/SphereCast en la dirección opuesta al grande para encontrar el punto más alejado transitable
-            Vector3 fleeDir = -toBigDino.normalized;
-            if (fleeDir.sqrMagnitude < 0.001f) fleeDir = -ai.transform.forward;
-
-            float safeRayDist = 15f;
-            int wallMask = ~((1 << 3) | (1 << 2));
-            float rayHeight = (ai != null && ai.IsSmallDino) ? 0.45f : 0.85f;
-            Vector3 origin = myPos + Vector3.up * rayHeight;
-
-            if (Physics.SphereCast(origin, 0.20f, fleeDir, out RaycastHit hit, 20f, wallMask, QueryTriggerInteraction.Ignore))
-            {
-                safeRayDist = Mathf.Max(1.0f, hit.distance - 0.6f);
-            }
-
-            targetSafePosition = myPos + fleeDir * safeRayDist;
-
-            if (ai.Movement != null)
-            {
-                ai.Movement.MoveTo(targetSafePosition);
-            }
-        }
-    }
-
-    private bool IsNodeReachableViaRaycast(Node node)
-    {
-        if (node == null) return false;
-        if (ai.Movement != null) return ai.Movement.CanMoveToNode(node);
-
-        Vector3 eyePos = ai.transform.position + Vector3.up * 0.45f;
-        Vector3 targetPos = node.transform.position + Vector3.up * 0.45f;
-        int wallMask = ~((1 << 3) | (1 << 2));
-
-        if (Physics.Linecast(eyePos, targetPos, out RaycastHit hit, wallMask, QueryTriggerInteraction.Ignore))
-        {
-            if (hit.normal.y < 0.7f) return false;
-        }
-        return true;
+        AdvanceToNextFleeNode();
     }
 
     public void Update()
     {
-        // 1. Determinar el rango de visión/detección del dinosaurio grande
-        float threatRange = (ai.ChasingPredator != null) ? ai.ChasingPredator.visionRange : 8.5f;
-
-        // 2. Determinar la distancia física actual hacia la amenaza
-        float distToThreat = float.MaxValue;
-        bool threatActive = false;
-
-        if (ai.ChasingPredator != null && ai.ChasingPredator.gameObject.activeInHierarchy)
+        if (ai.CanSeeThreat(out EnemyAI visiblePredator))
         {
-            distToThreat = Vector3.Distance(ai.transform.position, ai.ChasingPredator.transform.position);
-            threatActive = true;
-        }
-        else if (ai.CurrentThreat != null && ai.CurrentThreat.gameObject.activeInHierarchy)
-        {
-            distToThreat = Vector3.Distance(ai.transform.position, ai.CurrentThreat.position);
-            threatActive = true;
+            triggeringPredator = visiblePredator;
+            triggeringThreat = visiblePredator.transform;
+            ai.ChasingPredator = visiblePredator;
+            ai.CurrentThreat = visiblePredator.transform;
         }
 
-        // 3. Comprobar si se encuentra dentro o fuera del rango del dinosaurio grande
-        bool isInsideThreatRange = threatActive && (distToThreat <= threatRange);
+        Vector3 threatPos = GetThreatPosition();
+        Vector3 myPos = ai.transform.position;
+        float distToThreat = Vector3.Distance(myPos, threatPos);
+        bool threatActive = HasActiveThreat();
 
-        if (isInsideThreatRange)
+        float safeDistance = (ai.SafeRange > 0f) ? ai.SafeRange : (ai.IsSmallDino ? 12f : 16f);
+
+        bool threatDirectlyVisible = false;
+        bool threatActivelyChasingMe = false;
+
+        if (triggeringPredator != null && triggeringPredator.gameObject.activeInHierarchy)
         {
-            // Dentro del rango: reiniciar el temporizador de salida
+            threatDirectlyVisible = ai.CanSeeSpecificDino(triggeringPredator);
+            threatActivelyChasingMe = (triggeringPredator.TargetDino == ai || triggeringPredator.CurrentChaseTarget == ai.transform);
+        }
+        else if (ai.ChasingPredator != null && ai.ChasingPredator.gameObject.activeInHierarchy)
+        {
+            threatDirectlyVisible = ai.CanSeeSpecificDino(ai.ChasingPredator);
+            threatActivelyChasingMe = (ai.ChasingPredator.TargetDino == ai || ai.ChasingPredator.CurrentChaseTarget == ai.transform);
+        }
+        else if (ai.Player != null && triggeringThreat == ai.Player)
+        {
+            threatDirectlyVisible = ai.CanSeePlayer();
+            threatActivelyChasingMe = false;
+        }
+
+        bool isThreatTooClose = threatActive && (distToThreat < 4.5f || threatActivelyChasingMe || (threatDirectlyVisible && distToThreat < safeDistance));
+
+        if (isThreatTooClose)
+        {
             outOfRangeTimer = 0f;
-
-            // Al llegar al nodo o periódicamente, seleccionar el siguiente nodo alcanzable por Raycast más alejado
-            repathTimer -= Time.deltaTime;
-            bool reachedDestination = (ai.Movement != null && ai.Movement.HasReachedDestination);
-
-            if (reachedDestination || repathTimer <= 0f)
+            if (ai.Movement != null)
             {
-                repathTimer = RepathInterval;
-                FleeToFarthestNodeFromBigDino();
+                ai.Movement.speed = ai.fleeSpeed;
+            }
+
+            float bodyRadius = ai.IsSmallDino ? 0.28f : (ai.IsBigDino ? 0.85f : 0.50f);
+
+            if (nodeAdvanceCooldown > 0f) nodeAdvanceCooldown -= Time.deltaTime;
+
+            float distToTargetNode = (currentFleeNode != null)
+                ? Vector2.Distance(new Vector2(myPos.x, myPos.z), new Vector2(currentFleeNode.transform.position.x, currentFleeNode.transform.position.z))
+                : 0f;
+
+            bool arrived = (ai.Movement != null && ai.Movement.HasReachedDestination);
+            if (currentFleeNode == null || arrived || (distToTargetNode <= 0.90f && nodeAdvanceCooldown <= 0f))
+            {
+                nodeAdvanceCooldown = NodeAdvanceCooldownDuration;
+                AdvanceToNextFleeNode();
+            }
+
+            if (obstacleAvoidCooldown > 0f) obstacleAvoidCooldown -= Time.deltaTime;
+            else if (IsObstacleAhead(myPos, ai.transform.forward, bodyRadius, 1.5f))
+            {
+                obstacleAvoidCooldown = ObstacleAvoidCooldownDuration;
+                AdvanceToNextFleeNode(forceAlternative: true);
+            }
+
+            stuckTimer += Time.deltaTime;
+            if (stuckTimer >= StuckInterval)
+            {
+                float moved = Vector2.Distance(new Vector2(myPos.x, myPos.z), new Vector2(lastStuckCheckPos.x, lastStuckCheckPos.z));
+                if (moved < MinMoveThreshold)
+                {
+                    AdvanceToNextFleeNode(forceAlternative: true);
+                }
+                lastStuckCheckPos = myPos;
+                stuckTimer = 0f;
             }
         }
         else
         {
-            // Fuera del rango: acumular tiempo
             outOfRangeTimer += Time.deltaTime;
-
-            // La huida dura hasta salir del rango del dinosaurio grande más 3 segundos
             if (outOfRangeTimer >= RequiredOutOfRangeDuration)
             {
-                Debug.Log($"[{ai.gameObject.name}] ha salido del rango del dinosaurio grande ({threatRange:F1}m) + {RequiredOutOfRangeDuration}s completados. Regresando a patrulla.");
-                EndFlee();
-                return;
+                ai.TriggerPatrol();
             }
         }
     }
 
-    private void EndFlee()
-    {
-        ai.TriggerPatrol();
-    }
-
     public void Exit()
     {
-        // Restaurar aspecto normal del dinosaurio
         ai.SetVisualState(EnemyAI.DinoVisualState.Normal);
         ai.CurrentThreat = null;
         ai.ChasingPredator = null;
         ai.SpottedThreatPosition = Vector3.zero;
+        triggeringPredator = null;
+        triggeringThreat = null;
+        currentFleeNode = null;
+        recentlyVisitedFleeNodes.Clear();
 
         if (ai.Movement != null)
         {
@@ -232,5 +208,319 @@ public class FleeState : IState
             ai.Movement.ResetVelocity();
             ai.Movement.GoToNearestPatrolNode();
         }
+    }
+
+    private void AdvanceToNextFleeNode(bool forceAlternative = false)
+    {
+        Vector3 myPos = ai.transform.position;
+        Vector3 threatPos = GetThreatPosition();
+
+        Vector3 awayFromThreat = myPos - threatPos;
+        awayFromThreat.y = 0f;
+        Vector3 fleeDir = (awayFromThreat.sqrMagnitude > 0.001f) ? awayFromThreat.normalized : -ai.transform.forward;
+        fleeDir.y = 0f;
+        if (fleeDir.sqrMagnitude < 0.001f) fleeDir = Vector3.back;
+        fleeDir.Normalize();
+
+        float currentDistToThreat = awayFromThreat.magnitude;
+        float bodyRadius = ai.IsSmallDino ? 0.28f : (ai.IsBigDino ? 0.85f : 0.50f);
+
+        if (currentFleeNode != null && !recentlyVisitedFleeNodes.Contains(currentFleeNode))
+        {
+            recentlyVisitedFleeNodes.Add(currentFleeNode);
+            if (recentlyVisitedFleeNodes.Count > MaxRecentFleeNodes)
+            {
+                recentlyVisitedFleeNodes.RemoveAt(0);
+            }
+        }
+
+        Node nextNode = SelectFleeNodeWithFallbacks(myPos, threatPos, fleeDir, currentDistToThreat, bodyRadius, forceAlternative);
+
+        if (nextNode != null)
+        {
+            currentFleeNode = nextNode;
+            if (ai.Movement != null)
+            {
+                ai.Movement.SetCurrentDestinationNode(nextNode);
+                ai.Movement.MoveTo(nextNode.transform.position);
+            }
+        }
+    }
+
+    private Node SelectFleeNodeWithFallbacks(Vector3 myPos, Vector3 threatPos, Vector3 fleeDir, float currentDistToThreat, float bodyRadius, bool forceAlternative)
+    {
+        if (ai.Pathfinding == null) ai.Pathfinding = Object.FindAnyObjectByType<AStarPathfinding>();
+        Node[] allNodes = (ai.Pathfinding != null) ? ai.Pathfinding.GetAllNodes() : null;
+
+        List<Node> candidates = new List<Node>();
+
+        if (currentFleeNode != null && currentFleeNode.neighbors != null)
+        {
+            for (int i = 0; i < currentFleeNode.neighbors.Count; i++)
+            {
+                Node neighbor = currentFleeNode.neighbors[i];
+                if (neighbor != null && !candidates.Contains(neighbor))
+                {
+                    candidates.Add(neighbor);
+                }
+            }
+        }
+
+        if (allNodes != null)
+        {
+            for (int i = 0; i < allNodes.Length; i++)
+            {
+                Node node = allNodes[i];
+                if (node == null || candidates.Contains(node)) continue;
+
+                float distToNode = Vector2.Distance(new Vector2(myPos.x, myPos.z), new Vector2(node.transform.position.x, node.transform.position.z));
+                if (distToNode <= 14f && CanPassBetweenPoints(myPos, node.transform.position, bodyRadius, ai.transform))
+                {
+                    candidates.Add(node);
+                }
+            }
+        }
+
+        Node bestNode = null;
+        float bestScore = float.MinValue;
+
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            Node candidate = candidates[i];
+            if (candidate == null) continue;
+            if (forceAlternative && candidate == currentFleeNode) continue;
+
+            Vector3 nodePos = candidate.transform.position;
+            if (!CanPassBetweenPoints(myPos, nodePos, bodyRadius, ai.transform)) continue;
+
+            float distNodeToThreat = Vector3.Distance(nodePos, threatPos);
+            Vector3 toNode = nodePos - myPos;
+            toNode.y = 0f;
+            if (toNode.sqrMagnitude < 0.01f) continue;
+
+            Vector3 nodeDir = toNode.normalized;
+            float dotFlee = Vector3.Dot(nodeDir, fleeDir);
+
+            if (dotFlee < -0.35f && distNodeToThreat < currentDistToThreat) continue;
+
+            float lookaheadBonus = 0f;
+            if (candidate.neighbors != null)
+            {
+                for (int j = 0; j < candidate.neighbors.Count; j++)
+                {
+                    Node n2 = candidate.neighbors[j];
+                    if (n2 == null || n2 == candidate) continue;
+                    float dN2 = Vector3.Distance(n2.transform.position, threatPos);
+                    if (dN2 > distNodeToThreat) lookaheadBonus += 8.0f;
+                }
+            }
+
+            float distGain = distNodeToThreat - currentDistToThreat;
+            float score = (distGain * 4.0f) + (dotFlee * 25.0f) + lookaheadBonus;
+
+            if (recentlyVisitedFleeNodes.Contains(candidate))
+            {
+                score -= 20.0f;
+            }
+
+            if (score > bestScore)
+            {
+                bestScore = score;
+                bestNode = candidate;
+            }
+        }
+
+        if (bestNode != null) return bestNode;
+
+        Node bestLevel2 = null;
+        float maxDistLevel2 = -1f;
+        for (int i = 0; i < candidates.Count; i++)
+        {
+            Node candidate = candidates[i];
+            if (candidate == null || (forceAlternative && candidate == currentFleeNode)) continue;
+
+            if (CanPassBetweenPoints(myPos, candidate.transform.position, bodyRadius, ai.transform))
+            {
+                float d = Vector3.Distance(candidate.transform.position, threatPos);
+                if (d > maxDistLevel2)
+                {
+                    maxDistLevel2 = d;
+                    bestLevel2 = candidate;
+                }
+            }
+        }
+
+        if (bestLevel2 != null) return bestLevel2;
+
+        if (currentFleeNode != null && currentFleeNode.neighbors != null)
+        {
+            for (int i = 0; i < currentFleeNode.neighbors.Count; i++)
+            {
+                Node neighbor = currentFleeNode.neighbors[i];
+                if (neighbor != null && neighbor != currentFleeNode && CanPassBetweenPoints(myPos, neighbor.transform.position, bodyRadius, ai.transform))
+                {
+                    return neighbor;
+                }
+            }
+        }
+
+        if (currentFleeNode != null && currentFleeNode.neighbors != null && currentFleeNode.neighbors.Count > 0)
+        {
+            Node bestNeighbor = null;
+            float maxNbrDist = -1f;
+            for (int i = 0; i < currentFleeNode.neighbors.Count; i++)
+            {
+                Node n = currentFleeNode.neighbors[i];
+                if (n == null || n == currentFleeNode) continue;
+                float d = Vector3.Distance(n.transform.position, threatPos);
+                if (d > maxNbrDist)
+                {
+                    maxNbrDist = d;
+                    bestNeighbor = n;
+                }
+            }
+            if (bestNeighbor != null) return bestNeighbor;
+        }
+
+        if (ai.Pathfinding != null)
+        {
+            Node farthest = ai.Pathfinding.GetFarthestNodeFromPosition(threatPos);
+            if (farthest != null) return farthest;
+        }
+
+        return (allNodes != null && allNodes.Length > 0) ? allNodes[0] : null;
+    }
+
+    public static bool CanPassBetweenPoints(Vector3 fromPos, Vector3 toPos, float bodyRadius, Transform ignoreTransform = null)
+    {
+        float testHeight = 0.45f;
+        Vector3 origin = new Vector3(fromPos.x, testHeight, fromPos.z);
+        Vector3 target = new Vector3(toPos.x, testHeight, toPos.z);
+        Vector3 dir = target - origin;
+        float dist = dir.magnitude;
+        if (dist <= 0.35f) return true;
+
+        Vector3 normDir = dir / dist;
+        int wallMask = ~((1 << 3) | (1 << 2));
+
+        if (Physics.Linecast(origin, target, out RaycastHit lineHit, wallMask, QueryTriggerInteraction.Ignore))
+        {
+            if (IsValidWallObstacle(lineHit, ignoreTransform)) return false;
+        }
+
+        float castRadius = Mathf.Min(bodyRadius, 0.22f);
+        if (dist > castRadius * 2f)
+        {
+            Vector3 fwdOrigin = origin + normDir * 0.1f;
+            float castDist = Mathf.Max(0.05f, dist - 0.2f);
+            if (Physics.SphereCast(fwdOrigin, castRadius, normDir, out RaycastHit sphereHit, castDist, wallMask, QueryTriggerInteraction.Ignore))
+            {
+                if (IsValidWallObstacle(sphereHit, ignoreTransform)) return false;
+            }
+        }
+
+        return true;
+    }
+
+    private bool IsObstacleAhead(Vector3 pos, Vector3 forward, float radius, float checkDist)
+    {
+        float rayHeight = 0.45f;
+        Vector3 origin = new Vector3(pos.x, rayHeight, pos.z);
+        int wallMask = ~((1 << 3) | (1 << 2));
+
+        if (Physics.SphereCast(origin, radius * 0.70f, forward, out RaycastHit hit, checkDist, wallMask, QueryTriggerInteraction.Ignore))
+        {
+            if (IsValidWallObstacle(hit, ai.transform)) return true;
+        }
+
+        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
+
+        Vector3 leftDir = Quaternion.Euler(0f, -22f, 0f) * forward;
+        if (Physics.Raycast(origin - right * (radius * 0.5f), leftDir, out RaycastHit leftHit, checkDist * 0.85f, wallMask, QueryTriggerInteraction.Ignore))
+        {
+            if (IsValidWallObstacle(leftHit, ai.transform)) return true;
+        }
+
+        Vector3 rightDir = Quaternion.Euler(0f, 22f, 0f) * forward;
+        if (Physics.Raycast(origin + right * (radius * 0.5f), rightDir, out RaycastHit rightHit, checkDist * 0.85f, wallMask, QueryTriggerInteraction.Ignore))
+        {
+            if (IsValidWallObstacle(rightHit, ai.transform)) return true;
+        }
+
+        return false;
+    }
+
+    private static bool IsValidWallObstacle(RaycastHit hit, Transform ignoreTransform)
+    {
+        if (hit.collider == null) return false;
+        if (hit.normal.y >= 0.7f) return false;
+        if (ignoreTransform != null && (hit.transform == ignoreTransform || hit.transform.IsChildOf(ignoreTransform))) return false;
+
+        if (hit.collider.CompareTag("Enemy") || hit.collider.GetComponentInParent<EnemyAI>() != null) return false;
+
+        string colName = hit.collider.gameObject.name;
+        if (colName.IndexOf("plane", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            colName.IndexOf("floor", System.StringComparison.OrdinalIgnoreCase) >= 0 ||
+            colName.IndexOf("suelo", System.StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private Vector3 GetThreatPosition()
+    {
+        if (triggeringPredator != null && triggeringPredator.gameObject.activeInHierarchy)
+        {
+            lastKnownThreatPos = triggeringPredator.transform.position;
+            return lastKnownThreatPos;
+        }
+
+        if (triggeringThreat != null && triggeringThreat.gameObject.activeInHierarchy)
+        {
+            lastKnownThreatPos = triggeringThreat.position;
+            return lastKnownThreatPos;
+        }
+
+        if (ai.ChasingPredator != null && ai.ChasingPredator.gameObject.activeInHierarchy)
+        {
+            lastKnownThreatPos = ai.ChasingPredator.transform.position;
+            return lastKnownThreatPos;
+        }
+
+        if (ai.CurrentThreat != null && ai.CurrentThreat.gameObject.activeInHierarchy)
+        {
+            lastKnownThreatPos = ai.CurrentThreat.position;
+            return lastKnownThreatPos;
+        }
+
+        if (ai.SpottedThreatPosition != Vector3.zero)
+        {
+            return ai.SpottedThreatPosition;
+        }
+
+        return lastKnownThreatPos;
+    }
+
+    private bool HasActiveThreat()
+    {
+        if (triggeringThreat != null && ai.Player != null && triggeringThreat == ai.Player) return true;
+        if (ai.CurrentThreat != null && ai.Player != null && ai.CurrentThreat == ai.Player) return true;
+
+        if (ai.IsBigDino) return false;
+
+        EnemyAI threatAI = triggeringPredator ?? ai.ChasingPredator;
+        if (threatAI == null && triggeringThreat != null) threatAI = triggeringThreat.GetComponentInParent<EnemyAI>();
+        if (threatAI == null && ai.CurrentThreat != null) threatAI = ai.CurrentThreat.GetComponentInParent<EnemyAI>();
+
+        if (threatAI != null && threatAI.gameObject.activeInHierarchy)
+        {
+            if (threatAI is BlindEnemyAI || threatAI is AmbushEnemyAI || threatAI.dinoEmboscador) return false;
+            if (ai.IsMediumDino) return threatAI.IsBigDino;
+            if (ai.IsSmallDino) return threatAI.IsMediumDino || threatAI.IsBigDino;
+        }
+
+        return false;
     }
 }
